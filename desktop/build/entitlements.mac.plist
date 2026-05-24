@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Allow JIT compilation (required by some Python extension modules) -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <!-- Allow unsigned executable memory (some C extensions need this) -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <!-- Allow dyld environment variables (used by Python subprocess spawning) -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <true/>
+  <!-- Disable library validation so bundled Python .so files load correctly -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+  <!-- Network client access — server binds on loopback, but this covers outbound -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <!-- Network server — Django/Waitress listens on 127.0.0.1 -->
+  <key>com.apple.security.network.server</key>
+  <true/>
+  <!-- File access — read user files for uploads, write reports -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+  <!-- App sandbox: disabled for desktop tool accessing local filesystem -->
+  <key>com.apple.security.app-sandbox</key>
+  <false/>
+</dict>
+</plist>

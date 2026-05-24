@@ -1,0 +1,103 @@
+{
+  "name": "dept-chair-dashboard",
+  "version": "1.0.0",
+  "description": "Department Chair Dashboard",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "bundle-python": "node scripts/bundle-python.js",
+    "dist:mac": "npm run bundle-python && electron-builder --mac",
+    "dist:win": "npm run bundle-python && electron-builder --win",
+    "dist": "npm run bundle-python && electron-builder"
+  },
+  "dependencies": {
+    "axios": "^1.7.2"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^2.3.0",
+    "electron": "^42.2.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.deptchairdashboard.app",
+    "productName": "Dept Chair Dashboard",
+    "copyright": "",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "scripts/libreoffice.js",
+      "scripts/server.js"
+    ],
+    "extraResources": [
+      {
+        "from": "python-dist",
+        "to": "python",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../",
+        "to": "app",
+        "filter": [
+          "manage.py",
+          "serve.py",
+          "config/**",
+          "dashboard/**",
+          "workflows/**",
+          "templates/**",
+          "static/**",
+          "requirements.txt",
+          "data/check_request_template.pdf",
+          "data/etravel_voucher_template.pdf"
+        ]
+      }
+    ],
+    "afterSign": "scripts/notarize.js",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg"],
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Dept Chair Dashboard"
+    },
+    "dmg": {
+      "title": "Dept Chair Dashboard",
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}

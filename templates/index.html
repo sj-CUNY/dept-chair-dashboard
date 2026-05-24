@@ -1,0 +1,1548 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dept Chair Dashboard</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="{% static 'css/style.css' %}" />
+</head>
+<body>
+
+<!-- ── Navbar ──────────────────────────────────────────────────────── -->
+<nav class="navbar navbar-dark navbar-expand-lg">
+  <div class="container-fluid px-4">
+    <span class="navbar-brand d-flex align-items-center gap-2">
+      <i class="bi bi-mortarboard-fill"></i>
+      <span>Dept Chair Dashboard</span>
+      
+    </span>
+    <div class="ms-auto d-flex align-items-center gap-2">
+      <span id="clock" class="text-white-50 small"></span>
+      <span id="statusDot" class="status-dot status-unknown" title="Server status"></span>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main ───────────────────────────────────────────────────────── -->
+<div class="container-fluid px-0">
+  <div class="row g-0">
+
+    <!-- Sidebar -->
+    <div class="col-auto sidebar d-flex flex-column">
+      <nav class="nav flex-column pt-3" id="sideNav" role="tablist">
+        <a class="nav-link active" data-tab="autopen" href="#" role="tab">
+          <i class="bi bi-pen-fill"></i><span>AutoPen</span>
+        </a>
+        <a class="nav-link" data-tab="ehraf" href="#" role="tab">
+          <i class="bi bi-file-earmark-check-fill"></i><span>eHRAF Check</span>
+        </a>
+        <a class="nav-link" data-tab="schedule" href="#" role="tab">
+          <i class="bi bi-calendar3"></i><span>Schedule Analysis</span>
+        </a>
+        <a class="nav-link" data-tab="reports" href="#" role="tab">
+          <i class="bi bi-folder2-open"></i><span>Reports</span>
+        </a>
+        <a class="nav-link" data-tab="ehrafgen" href="#" role="tab">
+          <i class="bi bi-file-earmark-spreadsheet-fill"></i><span>eHRAF Generator</span>
+        </a>
+        <a class="nav-link" data-tab="checkrequest" href="#" role="tab">
+          <i class="bi bi-receipt"></i><span>Check Request</span>
+        </a>
+        <a class="nav-link" data-tab="travelvoucher" href="#" role="tab">
+          <i class="bi bi-airplane-fill"></i><span>Travel Voucher</span>
+        </a>
+        <!-- Dynamic form filler tabs injected here by JS -->
+        <div id="dynamicFormLinks"></div>
+        <div class="px-3 py-2 mt-auto border-top" style="margin-top:auto!important">
+          <button class="btn btn-sm btn-outline-light w-100" id="btnAddFormTemplate">
+            <i class="bi bi-plus-circle me-1"></i>Add Form
+          </button>
+        </div>
+      </nav>
+    </div>
+
+    <!-- Content -->
+    <div class="col content-area p-4">
+
+      <!-- ════════════════════════════════════════════════════════════
+           AUTOPEN TAB
+      ════════════════════════════════════════════════════════════ -->
+      <div id="tab-autopen" class="tab-pane active">
+        <div class="page-header mb-4">
+          <h2><i class="bi bi-pen-fill me-2"></i>AutoPen</h2>
+          <p class="text-muted mb-0">Draw or upload your signature, then sign PDF or Word documents automatically.</p>
+        </div>
+
+        <div class="row g-4">
+
+          <!-- LEFT: Signature setup -->
+          <div class="col-lg-5">
+            <div class="card h-100">
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-vector-pen me-1"></i>Your Signature</span>
+                <span id="sigSavedBadge" class="badge bg-success d-none">Saved</span>
+              </div>
+              <div class="card-body">
+
+                <!-- Tabs: Draw / Upload / Type / Script -->
+                <ul class="nav nav-pills nav-sm mb-3" id="sigInputTabs">
+                  <li class="nav-item">
+                    <a class="nav-link active" href="#" data-sigtab="draw">
+                      <i class="bi bi-pencil-fill me-1"></i>Draw
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="#" data-sigtab="upload">
+                      <i class="bi bi-upload me-1"></i>Upload image
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="#" data-sigtab="type">
+                      <i class="bi bi-fonts me-1"></i>Type
+                    </a>
+                  </li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="#" data-sigtab="script">
+                      <i class="bi bi-pen me-1"></i>Script
+                    </a>
+                  </li>
+                </ul>
+
+                <!-- Draw panel -->
+                <div id="sigDrawPanel">
+                  <div class="sig-canvas-wrapper">
+                    <canvas id="sigCanvas" width="400" height="150"></canvas>
+                    <div class="sig-placeholder" id="sigPlaceholder">Sign here</div>
+                  </div>
+                  <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-sm btn-outline-secondary" id="btnClearCanvas">
+                      <i class="bi bi-eraser me-1"></i>Clear
+                    </button>
+                    <div class="ms-auto d-flex align-items-center gap-2">
+                      <label class="small text-muted">Ink</label>
+                      <input type="color" id="sigColor" value="#1a1a2e" class="form-control form-control-sm sig-color-picker" />
+                      <label class="small text-muted">Weight</label>
+                      <input type="range" id="sigWeight" min="1" max="6" value="2" class="form-range" style="width:70px" />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Upload panel -->
+                <div id="sigUploadPanel" class="d-none">
+                  <div class="upload-zone" id="sigUploadZone">
+                    <i class="bi bi-image fs-2 text-muted"></i>
+                    <p class="mb-1 mt-2">Drop a PNG/JPG signature image</p>
+                    <p class="text-muted small mb-2">Transparent background recommended</p>
+                    <input type="file" id="sigImageInput" accept="image/*" class="d-none" />
+                    <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('sigImageInput').click()">
+                      Browse
+                    </button>
+                  </div>
+                  <div id="sigUploadPreview" class="mt-2 text-center d-none">
+                    <img id="sigPreviewImg" class="sig-preview-img" alt="Signature preview" />
+                  </div>
+                </div>
+
+                <!-- Type panel -->
+                <div id="sigTypePanel" class="d-none">
+                  <div class="mb-2">
+                    <input type="text" id="sigTypeText" class="form-control"
+                           placeholder="Type your name…" autocomplete="off" />
+                  </div>
+                  <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
+                    <select id="sigTypeFont" class="form-select form-select-sm" style="max-width:180px">
+                      <option value="Georgia, serif" style="font-family:Georgia,serif">Georgia</option>
+                      <option value="'Times New Roman', serif" style="font-family:'Times New Roman',serif">Times New Roman</option>
+                      <option value="Palatino, serif" style="font-family:Palatino,serif">Palatino</option>
+                      <option value="Garamond, serif" style="font-family:Garamond,serif">Garamond</option>
+                    </select>
+                    <input type="range" id="sigTypeFontSize" min="28" max="72" value="48" class="form-range" style="width:80px" title="Font size" />
+                    <input type="color" id="sigTypeColor" value="#1a1a2e" class="form-control form-control-sm sig-color-picker" title="Ink color" />
+                    <label class="form-check-label small text-muted ms-1">
+                      <input type="checkbox" id="sigTypeItalic" class="form-check-input" checked /> Italic
+                    </label>
+                  </div>
+                  <canvas id="sigTypeCanvas" width="400" height="120"
+                          style="border:1px solid #dee2e6;border-radius:6px;background:#fff;width:100%"></canvas>
+                </div>
+
+                <!-- Script panel -->
+                <div id="sigScriptPanel" class="d-none">
+                  <div class="mb-2">
+                    <input type="text" id="sigScriptText" class="form-control"
+                           placeholder="Type your name…" autocomplete="off" />
+                  </div>
+                  <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
+                    <select id="sigScriptStyle" class="form-select form-select-sm" style="max-width:200px">
+                      <option value="cursive">Cursive (system)</option>
+                      <option value="'Brush Script MT', cursive">Brush Script</option>
+                      <option value="'Segoe Script', cursive">Segoe Script</option>
+                      <option value="'Comic Sans MS', cursive">Casual</option>
+                    </select>
+                    <input type="range" id="sigScriptSize" min="28" max="72" value="52" class="form-range" style="width:80px" title="Font size" />
+                    <input type="color" id="sigScriptColor" value="#1a1a2e" class="form-control form-control-sm sig-color-picker" title="Ink color" />
+                    <label class="form-check-label small text-muted ms-1">
+                      <input type="checkbox" id="sigScriptSlant" class="form-check-input" checked /> Slant
+                    </label>
+                  </div>
+                  <canvas id="sigScriptCanvas" width="400" height="120"
+                          style="border:1px solid #dee2e6;border-radius:6px;background:#fff;width:100%"></canvas>
+                </div>
+
+                <hr />
+
+                <!-- Current saved signature -->
+                <div id="savedSigSection" class="d-none">
+                  <p class="small text-muted mb-1">Currently saved signature:</p>
+                  <img id="savedSigImg" class="saved-sig-img mb-2" alt="Saved signature" />
+                  <br />
+                  <button class="btn btn-sm btn-outline-danger" id="btnClearSig">
+                    <i class="bi bi-trash me-1"></i>Remove signature
+                  </button>
+                </div>
+                <div id="noSigNotice" class="text-muted small">
+                  <i class="bi bi-info-circle me-1"></i>No signature saved yet.
+                </div>
+
+                <div class="d-grid mt-3">
+                  <button class="btn btn-primary" id="btnSaveSig">
+                    <i class="bi bi-floppy-fill me-1"></i>Save Signature
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: Sign documents -->
+          <div class="col-lg-7">
+            <div class="card mb-4">
+              <div class="card-header"><i class="bi bi-file-earmark-arrow-up me-1"></i>Sign Document(s)</div>
+              <div class="card-body">
+
+                <div class="upload-zone mb-3" id="docDropZone">
+                  <i class="bi bi-files fs-2 text-muted"></i>
+                  <p class="mb-1 mt-2">Drop files or a folder here</p>
+                  <p class="text-muted small mb-2">Word files are converted to PDF before signing</p>
+                  <input type="file" id="docFileInput" accept=".pdf,.docx" multiple class="d-none" />
+                  <input type="file" id="docFolderInput" accept=".pdf,.docx" multiple webkitdirectory class="d-none" />
+                  <div class="d-flex gap-2 justify-content-center flex-wrap">
+                    <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('docFileInput').click()">
+                      <i class="bi bi-file-earmark-plus me-1"></i>Browse files
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('docFolderInput').click()">
+                      <i class="bi bi-folder2-open me-1"></i>Choose folder
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Selected file list -->
+                <div id="selectedFiles" class="mb-3 d-none">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <p class="small fw-semibold mb-0">Files queued:</p>
+                    <button class="btn btn-link btn-sm p-0 text-danger" id="btnClearQueue" title="Clear queue">
+                      <i class="bi bi-x-circle me-1"></i><span class="small">Clear</span>
+                    </button>
+                  </div>
+                  <ul class="list-group list-group-sm" id="fileList"></ul>
+                </div>
+
+                <!-- Batch results -->
+                <div id="batchResults" class="d-none mb-3">
+                  <!-- Auto-signed -->
+                  <div id="batchSignedSection" class="d-none mb-3">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                      <i class="bi bi-check-circle-fill text-success"></i>
+                      <span class="fw-semibold small">Auto-signed</span>
+                      <span id="batchSignedCount" class="badge bg-success rounded-pill">0</span>
+                    </div>
+                    <ul class="list-group list-group-sm" id="batchSignedList"></ul>
+                  </div>
+
+                  <!-- Needs manual placement -->
+                  <div id="batchUnmatchedSection" class="d-none">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                      <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                      <span class="fw-semibold small">Needs manual placement</span>
+                      <span id="batchUnmatchedCount" class="badge bg-warning text-dark rounded-pill">0</span>
+                    </div>
+                    <div id="batchUnmatchedList" class="d-flex flex-column gap-2"></div>
+                  </div>
+                </div>
+
+                <!-- Placement controls -->
+                <div class="card bg-light border-0 mb-3">
+                  <div class="card-body py-2">
+                    <p class="small fw-semibold mb-2">
+                      <i class="bi bi-grid-1x2 me-1"></i>Signature placement
+                      <button class="btn btn-link btn-sm p-0 ms-1" type="button" data-bs-toggle="collapse"
+                              data-bs-target="#placementCollapse">configure</button>
+                    </p>
+                    <div class="collapse" id="placementCollapse">
+                      <div id="placementList">
+                        <!-- JS-rendered placement rows -->
+                      </div>
+                      <button class="btn btn-sm btn-outline-secondary mt-2" id="btnAddPlacement">
+                        <i class="bi bi-plus me-1"></i>Add placement
+                      </button>
+                    </div>
+                    <p class="text-muted small mb-0" id="placementSummary">
+                      Page 1, lower-right corner (default)
+                    </p>
+                  </div>
+                </div>
+
+
+                <div class="d-grid">
+                  <button class="btn btn-success btn-lg" id="btnSignDocs">
+                    <i class="bi bi-pen-fill me-2"></i>Sign &amp; Download
+                  </button>
+                </div>
+
+                <div id="signProgress" class="mt-3 d-none">
+                  <div class="progress mb-2"><div class="progress-bar progress-bar-striped progress-bar-animated"
+                       id="signProgressBar" style="width:0%"></div></div>
+                  <p class="small text-muted mb-0" id="signProgressLabel"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Signed document history -->
+            <div class="card">
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-clock-history me-1"></i>Recently Signed</span>
+                <div class="d-flex gap-2 align-items-center">
+                  <button class="btn btn-link btn-sm p-0 text-danger" id="btnClearHistory" title="Clear history">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                  <button class="btn btn-link btn-sm p-0" id="btnRefreshHistory">
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="card-body p-0">
+                <div id="signedDocsTable" class="table-responsive">
+                  <table class="table table-hover table-sm mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Filename</th>
+                        <th>Size</th>
+                        <th>Date</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="signedDocsTbody">
+                      <tr><td colspan="4" class="text-muted text-center py-3">No signed documents yet</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Saved form types -->
+            <div class="card mt-4">
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-bookmark-fill me-1"></i>Saved Form Types</span>
+                <button class="btn btn-link btn-sm p-0" id="btnRefreshFormTypes">
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
+              </div>
+              <!-- Edit Form Type modal (hidden) -->
+              <div class="modal fade" id="editFtModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Form Type</h5>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                      <input type="hidden" id="editFtOriginalName" />
+                      <div class="mb-3">
+                        <label class="form-label fw-semibold">Name</label>
+                        <input type="text" class="form-control" id="editFtName" placeholder="Form type name" />
+                      </div>
+                      <div class="mb-1">
+                        <label class="form-label fw-semibold mb-1">Placements</label>
+                        <div class="text-muted small" id="editFtPlacementSummary"></div>
+                      </div>
+                      <button class="btn btn-sm btn-outline-secondary mt-2" id="editFtRecalibrate">
+                        <i class="bi bi-crosshair me-1"></i>Re-calibrate placements…
+                      </button>
+                      <div class="form-text">Upload a sample PDF to reposition the signature, name, and date boxes.</div>
+                      <input type="file" id="editFtFileInput" accept=".pdf" class="d-none" />
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                      <button type="button" class="btn btn-primary" id="editFtSaveBtn">
+                        <i class="bi bi-check-lg me-1"></i>Save Changes
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="card-body p-0" id="formTypesListWrap">
+                <div class="text-muted text-center py-3 small" id="formTypesEmpty">
+                  No form types saved yet. Sign a document and choose to remember its placement.
+                </div>
+                <ul class="list-group list-group-flush d-none" id="formTypesList"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════════
+           eHRAF TAB
+      ════════════════════════════════════════════════════════════ -->
+      <div id="tab-ehraf" class="tab-pane d-none">
+        <div class="page-header mb-4">
+          <h2><i class="bi bi-file-earmark-check-fill me-2"></i>eHRAF Quality Check</h2>
+          <p class="text-muted mb-0">Verify part-time instructor data against schedule and payroll records.</p>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-lg-6">
+            <div class="card">
+              <div class="card-header">Upload Files</div>
+              <div class="card-body">
+                <form id="ehrafForm">
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Schedule file <span class="text-danger">*</span></label>
+                    <input type="file" class="form-control" id="ehrafSchedule" name="schedule" accept=".xlsx,.xls,.csv" required />
+                    <div class="form-text">Daily class schedule export</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">eHRAF / Payroll file <span class="text-danger">*</span></label>
+                    <input type="file" class="form-control" id="ehrafFile" name="ehraf" accept=".xlsx,.xls,.csv" required />
+                    <div class="form-text">Adjunct payroll export from eHRAF system</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Instructor table <span class="text-danger">*</span></label>
+                    <input type="file" class="form-control" id="ehrafInstructor" name="instructor" accept=".xlsx,.xls,.csv" required />
+                    <div class="form-text">Instructor roster with contact info</div>
+                  </div>
+                  <div class="d-grid">
+                    <button type="submit" class="btn btn-primary">
+                      <i class="bi bi-play-fill me-1"></i>Run Quality Check
+                    </button>
+                  </div>
+                </form>
+                <div id="ehrafStatus" class="mt-3"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6">
+            <div class="card h-100">
+              <div class="card-header">What this check does</div>
+              <div class="card-body">
+                <ul class="list-unstyled checks-list">
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Cross-references instructors teaching sections with eHRAF entries</li>
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Flags instructors on schedule but missing from payroll</li>
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Flags payroll entries with no matching schedule sections</li>
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Reports contact count mismatches</li>
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Exports a color-coded Excel report</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════════
+           SCHEDULE ANALYSIS TAB
+      ════════════════════════════════════════════════════════════ -->
+      <div id="tab-schedule" class="tab-pane d-none">
+        <div class="page-header mb-4">
+          <h2><i class="bi bi-calendar3 me-2"></i>Schedule Analysis</h2>
+          <p class="text-muted mb-0">Generate enrollment, staffing, and room-utilization reports from the current schedule.</p>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-lg-6">
+            <div class="card">
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <span>Upload Schedule</span>
+                <button class="btn btn-sm btn-outline-secondary" onclick="openRoomModal()">
+                  <i class="bi bi-building"></i> Manage Rooms
+                </button>
+              </div>
+              <div class="card-body">
+                <form id="scheduleForm">
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Schedule file <span class="text-danger">*</span></label>
+                    <input type="file" class="form-control" id="scheduleFile" name="schedule"
+                           accept=".xlsx,.xls,.csv" required />
+                    <div class="form-text">Full daily schedule download (Excel or CSV)</div>
+                  </div>
+                  <div class="d-grid">
+                    <button type="submit" class="btn btn-primary">
+                      <i class="bi bi-play-fill me-1"></i>Run Analysis
+                    </button>
+                  </div>
+                </form>
+                <div id="scheduleStatus" class="mt-3"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6">
+            <div class="card h-100">
+              <div class="card-header">What this analysis covers</div>
+              <div class="card-body">
+                <ul class="list-unstyled checks-list">
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Section count by day / time block</li>
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Enrollment vs. capacity summary</li>
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Instructor load per faculty member</li>
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Cancelled / zero-enrollment sections</li>
+                  <li><i class="bi bi-check-circle-fill text-success me-2"></i>Exports Excel workbook with charts</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════════
+           REPORTS TAB
+      ════════════════════════════════════════════════════════════ -->
+      <div id="tab-reports" class="tab-pane d-none">
+        <div class="page-header mb-4">
+          <h2><i class="bi bi-folder2-open me-2"></i>Reports</h2>
+          <p class="text-muted mb-0">Download previously generated reports.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <span>Generated Reports</span>
+            <button class="btn btn-link btn-sm p-0" id="btnRefreshReports">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover mb-0">
+                <thead class="table-light">
+                  <tr><th>Filename</th><th>Size</th><th>Date</th><th></th></tr>
+                </thead>
+                <tbody id="reportsTbody">
+                  <tr><td colspan="4" class="text-muted text-center py-3">No reports yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── eHRAF Generator tab ─────────────────────────────────────────── -->
+      <div id="tab-ehrafgen" class="tab-pane d-none">
+        <div class="page-header mb-4">
+          <h2><i class="bi bi-file-earmark-spreadsheet-fill me-2"></i>eHRAF Generator</h2>
+          <p class="text-muted mb-0">Generate the adjunct payroll list for your assistant. Fall/Spring includes only part-time instructors; Summer/Winter includes everyone.</p>
+        </div>
+
+        <div class="row g-4">
+
+          <!-- LEFT: Settings form -->
+          <div class="col-lg-5">
+
+            <div class="card mb-3">
+              <div class="card-header"><strong>Session</strong></div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-6">
+                    <label class="form-label">Season</label>
+                    <select id="ehrafSeason" class="form-select">
+                      <option value="Fall">Fall</option>
+                      <option value="Spring">Spring</option>
+                      <option value="Summer">Summer</option>
+                      <option value="Winter">Winter</option>
+                    </select>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label">Year</label>
+                    <input id="ehrafYear" type="number" class="form-control" value="2026" min="2020" max="2040">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Session dates — changes based on season -->
+            <div class="card mb-3">
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <strong id="ehrafDatesLabel">Semester Dates</strong>
+                <button id="btnAddSession" class="btn btn-outline-secondary btn-sm">
+                  <i class="bi bi-plus-lg me-1"></i>Add Session
+                </button>
+              </div>
+              <div class="card-body p-0">
+
+                <!-- All seasons: multi-session table.
+                     Fall/Spring defaults to one "Regular" row + optional 8W rows.
+                     Summer/Winter defaults to 5W1 + 5W2 rows. -->
+                <div class="table-responsive">
+                  <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th style="width:100px">Session Code</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th style="width:36px"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="ehrafSessionRows">
+                      <!-- rows added by JS -->
+                    </tbody>
+                  </table>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="card mb-3">
+              <div class="card-header"><strong>Files</strong></div>
+              <div class="card-body">
+                <div class="mb-3">
+                  <label class="form-label">Schedule File <span class="text-danger">*</span></label>
+                  <input type="file" id="ehrafScheduleFile" class="form-control form-control-sm" accept=".xlsx">
+                  <div class="form-text">Export from CUNYfirst — same format as usual.</div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Previous Semester Schedule
+                    <span class="text-muted small">(optional — for New Hire / Repeat Appointment)</span>
+                  </label>
+                  <input type="file" id="ehrafPrevScheduleFile" class="form-control form-control-sm" accept=".xlsx">
+                  <div class="form-text">Upload the prior semester's CUNYfirst export to auto-detect New Hire vs Repeat Appointment.</div>
+                </div>
+                <div>
+                  <label class="form-label">Instructor Table
+                    <span class="text-muted small">(optional if previously uploaded)</span>
+                  </label>
+                  <input type="file" id="ehrafInstrFile" class="form-control form-control-sm" accept=".xlsx">
+                  <div class="form-text" id="ehrafInstrNote">Upload <code>instructor_table.xlsx</code> once; it will be remembered. Download Sample   <a href="data/instructor_table.xlsx" class="cover-link">here</a></div>
+                </div>
+              </div>
+            </div>
+
+            <button id="btnGenerateEhraf" class="btn btn-primary w-100">
+              <i class="bi bi-download me-2"></i>Generate &amp; Download
+            </button>
+
+          </div><!-- /col left -->
+
+          <!-- RIGHT: Preview / status -->
+          <div class="col-lg-7">
+            <div class="card h-100">
+              <div class="card-header"><strong>Preview</strong></div>
+              <div class="card-body d-flex flex-column align-items-center justify-content-center text-muted" id="ehrafPreview" style="min-height:320px">
+                <i class="bi bi-file-earmark-spreadsheet fs-1 opacity-25 mb-3"></i>
+                <div>Configure the form and click <strong>Generate &amp; Download</strong>.</div>
+                <div class="small mt-1">The spreadsheet will download directly to your computer.</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /tab-ehrafgen -->
+
+      <!-- ════════════════════════════════════════════════════════════
+           CHECK REQUEST TAB
+      ════════════════════════════════════════════════════════════ -->
+      <div id="tab-checkrequest" class="tab-pane d-none">
+        <div class="page-header mb-4">
+          <h2><i class="bi bi-receipt me-2"></i>Check Request</h2>
+          <p class="text-muted mb-0">Fill out Bus.043 Check Request Form, sign it, and download the completed PDF.</p>
+        </div>
+
+        <!-- Template upload notice -->
+        <div id="crNoTemplate" class="alert alert-warning d-none">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          No check request template found. Please upload the blank <strong>Bus.043 - Check Request Form.pdf</strong> below.
+          <div class="mt-2">
+            <label class="form-label fw-semibold mb-1">Upload template PDF</label>
+            <div class="d-flex gap-2 align-items-center">
+              <input type="file" id="crTemplateInput" accept=".pdf" class="form-control form-control-sm" style="max-width:320px" />
+              <button class="btn btn-sm btn-primary" id="crUploadTemplateBtn">
+                <i class="bi bi-upload me-1"></i>Upload
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="crFormWrap">
+          <div class="row g-4">
+
+            <!-- LEFT: Form fields -->
+            <div class="col-lg-7">
+              <div class="card">
+                <div class="card-header"><i class="bi bi-pencil-square me-1"></i>Form Fields</div>
+                <div class="card-body">
+
+                  <!-- Check type -->
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Check Type</label>
+                    <div class="d-flex flex-column gap-1">
+                      <div class="form-check">
+                        <input class="form-check-input" type="radio" name="crCheckType" id="crDepository" value="depository" checked />
+                        <label class="form-check-label" for="crDepository">
+                          COLLEGE DEPOSITORY
+                          <span class="text-muted small">(For use with payments &lt; $1,000.00 only)</span>
+                        </label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="radio" name="crCheckType" id="crAuxCorp" value="aux_corp" />
+                        <label class="form-check-label" for="crAuxCorp">Aux Corp Check</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="radio" name="crCheckType" id="crFoundation" value="john_jay_foundation" />
+                        <label class="form-check-label" for="crFoundation">Foundation</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Options -->
+                  <div class="mb-3 d-flex gap-4">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="crWhenReady" />
+                      <label class="form-check-label" for="crWhenReady">When Ready — Contact Me</label>
+                    </div>
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="crMailCheck" />
+                      <label class="form-check-label" for="crMailCheck">Mail Check</label>
+                    </div>
+                  </div>
+
+                  <div class="row g-3 mb-3">
+                    <div class="col-sm-4">
+                      <label class="form-label fw-semibold">Amount <span class="text-danger">*</span></label>
+                      <div class="input-group input-group-sm">
+                        <span class="input-group-text">$</span>
+                        <input type="text" id="crAmount" class="form-control" placeholder="0.00" />
+                      </div>
+                    </div>
+                    <div class="col-sm-4">
+                      <label class="form-label fw-semibold">Date</label>
+                      <input type="date" id="crDate" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-sm-4">
+                      <label class="form-label fw-semibold">Date Required</label>
+                      <input type="date" id="crDateRequired" class="form-control form-control-sm" />
+                    </div>
+                  </div>
+
+                  <hr class="my-3" />
+                  <p class="fw-semibold small mb-2"><i class="bi bi-building me-1"></i>Vendor / Payee</p>
+
+                  <!-- Vendor dropdown -->
+                  <div class="mb-2">
+                    <label class="form-label small">Saved Vendors</label>
+                    <div class="d-flex gap-2">
+                      <select id="crVendorSelect" class="form-select form-select-sm">
+                        <option value="">— Select a saved vendor —</option>
+                      </select>
+                      <button class="btn btn-sm btn-outline-danger" id="crDeleteVendorBtn" title="Delete selected vendor" disabled>
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="row g-2 mb-2">
+                    <div class="col-12">
+                      <label class="form-label small fw-semibold">Payee Name <span class="text-danger">*</span></label>
+                      <input type="text" id="crPayee" class="form-control form-control-sm" placeholder="Name on check" />
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label small fw-semibold">Address</label>
+                      <input type="text" id="crAddress" class="form-control form-control-sm" placeholder="Street address" />
+                    </div>
+                    <div class="col-5">
+                      <label class="form-label small fw-semibold">City</label>
+                      <input type="text" id="crCity" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-3">
+                      <label class="form-label small fw-semibold">State</label>
+                      <input type="text" id="crState" class="form-control form-control-sm" maxlength="2" placeholder="NY" />
+                    </div>
+                    <div class="col-4">
+                      <label class="form-label small fw-semibold">ZIP</label>
+                      <input type="text" id="crZip" class="form-control form-control-sm" maxlength="10" />
+                    </div>
+                  </div>
+
+                  <!-- Save vendor -->
+                  <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="crSaveVendor" />
+                    <label class="form-check-label small" for="crSaveVendor">Remember this vendor</label>
+                    <input type="text" id="crVendorLabel" class="form-control form-control-sm d-none mt-1"
+                           placeholder="Vendor label (defaults to payee name)" style="max-width:260px" />
+                  </div>
+
+                  <hr class="my-3" />
+                  <p class="fw-semibold small mb-2"><i class="bi bi-card-text me-1"></i>Description / Purpose</p>
+
+                  <div class="mb-2">
+                    <input type="text" id="crDesc1" class="form-control form-control-sm" placeholder="Line 1" />
+                  </div>
+                  <div class="mb-2">
+                    <input type="text" id="crDesc2" class="form-control form-control-sm" placeholder="Line 2 (optional)" />
+                  </div>
+                  <div class="mb-3">
+                    <input type="text" id="crDesc3" class="form-control form-control-sm" placeholder="Line 3 (optional)" />
+                  </div>
+
+                  <hr class="my-3" />
+                  <p class="fw-semibold small mb-2"><i class="bi bi-person me-1"></i>Requester</p>
+
+                  <div class="row g-2">
+                    <div class="col-sm-5">
+                      <label class="form-label small fw-semibold">Print Name <span class="text-danger">*</span></label>
+                      <input type="text" id="crPrintName" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-sm-3">
+                      <label class="form-label small fw-semibold">Sign Date</label>
+                      <input type="date" id="crSignDate" class="form-control form-control-sm" />
+                    </div>
+                    <div class="col-sm-4">
+                      <label class="form-label small fw-semibold">Phone</label>
+                      <input type="text" id="crPhone" class="form-control form-control-sm" placeholder="ext. 1234" />
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- RIGHT: Sign & Download -->
+            <div class="col-lg-5">
+              <div class="card mb-4">
+                <div class="card-header"><i class="bi bi-pen-fill me-1"></i>Signature &amp; Download</div>
+                <div class="card-body">
+
+                  <p class="small text-muted mb-3">
+                    Fill the fields, then click <strong>Generate &amp; Place Signature</strong> to open the
+                    placement picker. After confirming placement the signed PDF downloads automatically.
+                  </p>
+
+                  <div class="mb-3">
+                    <label class="form-label small fw-semibold">Signer name (for printed name field)</label>
+                    <input type="text" id="crSignerName" class="form-control form-control-sm"
+                           placeholder="e.g. Jane Smith" />
+                  </div>
+
+                  <div id="crStatus" class="mb-3"></div>
+
+                  <div class="d-grid">
+                    <button class="btn btn-success btn-lg" id="crGenerateBtn">
+                      <i class="bi bi-file-earmark-check me-2"></i>Generate &amp; Place Signature
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Vendor list summary -->
+              <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                  <span><i class="bi bi-people-fill me-1"></i>Saved Vendors</span>
+                  <button class="btn btn-link btn-sm p-0" id="crRefreshVendors">
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                </div>
+                <div class="card-body p-0">
+                  <div id="crVendorListWrap">
+                    <p class="text-muted small text-center py-3 mb-0" id="crVendorListEmpty">No vendors saved yet.</p>
+                    <ul class="list-group list-group-flush d-none" id="crVendorList"></ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div><!-- /tab-checkrequest -->
+
+      <!-- ════════════════════════════════════════════════════════════
+           TRAVEL VOUCHER TAB
+      ════════════════════════════════════════════════════════════ -->
+      <div id="tab-travelvoucher" class="tab-pane d-none">
+        <div class="page-header mb-4">
+          <h2><i class="bi bi-airplane-fill me-2"></i>Travel Voucher</h2>
+          <p class="text-muted mb-0">Fill out E-Travel Expense Vouchers for hiring-related expenses and download the completed PDFs.</p>
+        </div>
+
+        <!-- Template upload notice (shown when no template) -->
+        <div id="tvNoTemplate" class="alert alert-warning d-none">
+          <i class="bi bi-exclamation-triangle-fill me-2"></i>
+          No travel voucher template found. Please upload the blank <strong>etravel_voucher_template.pdf</strong> below.
+          <div class="mt-2">
+            <label class="form-label fw-semibold mb-1">Upload template PDF</label>
+            <div class="d-flex gap-2 align-items-center">
+              <input type="file" id="tvTemplateInput" accept=".pdf" class="form-control form-control-sm" style="max-width:320px" />
+              <button class="btn btn-sm btn-primary" id="tvUploadTemplateBtn">
+                <i class="bi bi-upload me-1"></i>Upload
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main form (shown when template exists) -->
+        <div id="tvFormWrap" class="d-none">
+
+          <!-- ── Traveler Profile ──────────────────────────────────── -->
+          <div class="card mb-4">
+            <div class="card-header d-flex align-items-center justify-content-between"
+                 role="button" data-bs-toggle="collapse" data-bs-target="#tvProfileBody"
+                 aria-expanded="true" aria-controls="tvProfileBody" style="cursor:pointer">
+              <span><i class="bi bi-person-badge me-1"></i>Traveler Profile</span>
+              <i class="bi bi-chevron-up" id="tvProfileChevron"></i>
+            </div>
+            <div class="collapse show" id="tvProfileBody">
+              <div class="card-body">
+
+                <div class="row g-3 mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Full Name</label>
+                    <input type="text" id="tvProfName" class="form-control form-control-sm" placeholder="" />
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Mailing Address 1</label>
+                    <input type="text" id="tvProfAddr1" class="form-control form-control-sm" placeholder="" />
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Mailing Address 2 <span class="text-muted">(optional)</span></label>
+                    <input type="text" id="tvProfAddr2" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label small fw-semibold">City</label>
+                    <input type="text" id="tvProfCity" class="form-control form-control-sm" placeholder="" />
+                  </div>
+                  <div class="col-md-1">
+                    <label class="form-label small fw-semibold">State</label>
+                    <input type="text" id="tvProfState" class="form-control form-control-sm" maxlength="2" placeholder="" />
+                  </div>
+                  <div class="col-md-2">
+                    <label class="form-label small fw-semibold">ZIP</label>
+                    <input type="text" id="tvProfZip" class="form-control form-control-sm" maxlength="10" placeholder="" />
+                  </div>
+                </div>
+
+                <div class="row g-3 align-items-end mb-3">
+                  <div class="col-auto">
+                    <label class="form-label small fw-semibold d-block">US Citizen / Permanent Resident?</label>
+                    <div class="d-flex gap-3">
+                      <div class="form-check">
+                        <input class="form-check-input" type="radio" name="tvCitizen" id="tvCitizenYes" value="yes" checked />
+                        <label class="form-check-label small" for="tvCitizenYes">Yes</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="radio" name="tvCitizen" id="tvCitizenNo" value="no" />
+                        <label class="form-check-label small" for="tvCitizenNo">No</label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-auto">
+                    <label class="form-label small fw-semibold" for="tvProfMileage">Mileage Rate ($/mi)</label>
+                    <input type="text" id="tvProfMileage" class="form-control form-control-sm" style="max-width:80px" placeholder="" />
+                  </div>
+                  <div class="col-auto">
+                    <label class="form-label small fw-semibold" for="tvProfSignDate">Default Signature Date</label>
+                    <input type="text" id="tvProfSignDate" class="form-control form-control-sm" style="max-width:140px" placeholder="e.g. 3/23/2026" />
+                  </div>
+                  <div class="col-auto d-flex align-items-end gap-2">
+                    <button class="btn btn-sm btn-primary" id="tvSaveProfileBtn">
+                      <i class="bi bi-floppy-fill me-1"></i>Save Profile
+                    </button>
+                    <span id="tvProfileSaved" class="text-success small d-none">
+                      <i class="bi bi-check-circle me-1"></i>Saved
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Expense Days ─────────────────────────────────────── -->
+          <h5 class="mb-3"><i class="bi bi-calendar3 me-1"></i>Expense Days</h5>
+
+          <div id="tvDaysContainer">
+
+            <!-- Day 1 (static first card — cloned by JS for additional days) -->
+            <div class="card mb-3 tv-day-card">
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <span class="tv-day-label fw-semibold">Day 1</span>
+                <button type="button" class="btn btn-sm btn-outline-danger tv-remove-day-btn d-none" title="Remove this day">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+              <div class="card-body">
+
+                <div class="row g-3 mb-3">
+                  <div class="col-sm-3">
+                    <label class="form-label small fw-semibold">Trip Date</label>
+                    <input type="text" class="form-control form-control-sm tv-trip-date" placeholder="e.g. 3/12/2026" />
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small fw-semibold">Candidate / Speaker Name</label>
+                    <input type="text" class="form-control form-control-sm tv-candidate" placeholder="Jane Smith" />
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small fw-semibold">Departure City</label>
+                    <input type="text" class="form-control form-control-sm tv-departure" value="" />
+                  </div>
+                  <div class="col-sm-3">
+                    <label class="form-label small fw-semibold">Destination City</label>
+                    <input type="text" class="form-control form-control-sm tv-destination" value="" />
+                  </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                  <div class="col-md-9">
+                    <label class="form-label small fw-semibold">Purpose of Trip</label>
+                    <textarea class="form-control form-control-sm tv-purpose" rows="2"
+                              data-auto="true"
+                              placeholder="Auto-filled from candidate + date"></textarea>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Signature Date</label>
+                    <input type="text" class="form-control form-control-sm tv-sign-date" placeholder="e.g. 3/23/2026" />
+                  </div>
+                </div>
+
+                <!-- Expense category tables -->
+                <div class="row g-3">
+
+                  <!-- Meals -->
+                  <div class="col-lg-6">
+                    <div class="tv-expense-section" data-category="meals">
+                      <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="small fw-semibold"><i class="bi bi-cup-hot me-1"></i>Meals</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary tv-add-row-btn">
+                          <i class="bi bi-plus"></i> Add row
+                        </button>
+                      </div>
+                      <table class="table table-sm table-bordered mb-1 tv-expense-table">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Description</th>
+                            <th style="width:110px">Amount</th>
+                            <th style="width:40px"></th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Transportation -->
+                  <div class="col-lg-6">
+                    <div class="tv-expense-section" data-category="transportation">
+                      <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="small fw-semibold"><i class="bi bi-train-front me-1"></i>Transportation</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary tv-add-row-btn">
+                          <i class="bi bi-plus"></i> Add row
+                        </button>
+                      </div>
+                      <table class="table table-sm table-bordered mb-1 tv-expense-table">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Description</th>
+                            <th style="width:110px">Amount</th>
+                            <th style="width:40px"></th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Lodging -->
+                  <div class="col-lg-6">
+                    <div class="tv-expense-section" data-category="lodging">
+                      <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="small fw-semibold"><i class="bi bi-building me-1"></i>Lodging</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary tv-add-row-btn">
+                          <i class="bi bi-plus"></i> Add row
+                        </button>
+                      </div>
+                      <table class="table table-sm table-bordered mb-1 tv-expense-table">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Description</th>
+                            <th style="width:110px">Amount</th>
+                            <th style="width:40px"></th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <!-- Local Travel -->
+                  <div class="col-lg-6">
+                    <div class="tv-expense-section" data-category="local_travel">
+                      <div class="d-flex align-items-center justify-content-between mb-1">
+                        <span class="small fw-semibold"><i class="bi bi-geo-alt me-1"></i>Local Travel</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary tv-add-row-btn">
+                          <i class="bi bi-plus"></i> Add row
+                        </button>
+                      </div>
+                      <table class="table table-sm table-bordered mb-1 tv-expense-table">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Description</th>
+                            <th style="width:110px">Amount</th>
+                            <th style="width:40px"></th>
+                          </tr>
+                        </thead>
+                        <tbody></tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div><!-- /row expense categories -->
+
+                <div class="text-end mt-2">
+                  <span class="badge bg-secondary tv-day-total">Total: $0.00</span>
+                </div>
+
+              </div><!-- /card-body -->
+            </div><!-- /tv-day-card -->
+
+          </div><!-- /tvDaysContainer -->
+
+          <div class="mb-4">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="tvAddDayBtn">
+              <i class="bi bi-plus-circle me-1"></i>Add Another Day
+            </button>
+          </div>
+
+          <!-- Generate button + status -->
+          <div class="d-grid mb-3">
+            <button class="btn btn-success btn-lg" id="tvGenerateBtn">
+              <i class="bi bi-file-earmark-arrow-down me-2"></i>Generate Vouchers
+            </button>
+          </div>
+          <div id="tvStatus" class="mb-3"></div>
+
+          <!-- Results list -->
+          <div id="tvResults" class="d-none">
+            <h6 class="mb-2"><i class="bi bi-download me-1"></i>Download Vouchers</h6>
+            <ul id="tvResultList" class="list-group"></ul>
+          </div>
+
+        </div><!-- /tvFormWrap -->
+
+      <!-- Dynamic form filler tab panes injected here by JS -->
+      <div id="dynamicFormPanes"></div>
+      </div><!-- /tab-travelvoucher -->
+
+    </div><!-- /content-area -->
+  </div><!-- /row -->
+</div><!-- /container-fluid -->
+
+<!-- ── Placement picker modal ────────────────────────────────────────── -->
+<div class="modal fade" id="placementPickerModal" tabindex="-1" aria-labelledby="ppModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="ppModalLabel">
+          <i class="bi bi-cursor me-2"></i>Click to Place Signature
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+
+        <!-- top toolbar row 1: page nav + field type toggle -->
+        <div class="d-flex align-items-center gap-3 px-3 py-2 border-bottom bg-light flex-wrap">
+          <button id="ppPrevPage" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <span id="ppPageLabel" class="small fw-semibold">Page 1 of 1</span>
+          <button id="ppNextPage" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+
+          <!-- field type selector -->
+          <div class="btn-group ms-2" role="group" aria-label="Field type">
+            <input type="radio" class="btn-check" name="ppFieldType" id="ppFtSig" value="signature" checked>
+            <label class="btn btn-sm btn-outline-primary" for="ppFtSig">
+              <i class="bi bi-pen-fill me-1"></i>Signature
+            </label>
+            <input type="radio" class="btn-check" name="ppFieldType" id="ppFtName" value="name">
+            <label class="btn btn-sm btn-outline-success" for="ppFtName">
+              <i class="bi bi-person-fill me-1"></i>Name
+            </label>
+            <input type="radio" class="btn-check" name="ppFieldType" id="ppFtDate" value="date">
+            <label class="btn btn-sm btn-outline-warning" for="ppFtDate">
+              <i class="bi bi-calendar-fill me-1"></i>Date
+            </label>
+            <input type="radio" class="btn-check" name="ppFieldType" id="ppFtText" value="text">
+            <label class="btn btn-sm btn-outline-info" for="ppFtText">
+              <i class="bi bi-fonts me-1"></i>Text
+            </label>
+          </div>
+
+          <!-- sig width + height (shown only for signature mode) -->
+          <div class="ms-2 d-flex align-items-center gap-2" id="ppSigWidthGroup">
+            <label class="small text-muted mb-0">W</label>
+            <input type="range" id="ppSigWidth" min="5" max="60" value="28" class="form-range" style="width:80px">
+            <span id="ppSigWidthLabel" class="small text-muted">28%</span>
+            <label class="small text-muted mb-0 ms-2">H</label>
+            <input type="range" id="ppSigHeight" min="2" max="20" value="8" class="form-range" style="width:80px">
+            <span id="ppSigHeightLabel" class="small text-muted">8%</span>
+          </div>
+
+          <!-- font size (shown for name / date / text modes) -->
+          <div class="ms-2 d-flex align-items-center gap-2 d-none" id="ppFontSizeGroup">
+            <label class="small text-muted mb-0" for="ppFontSize">Font pt</label>
+            <input type="number" id="ppFontSize" min="7" max="24" value="11"
+                   class="form-control form-control-sm" style="width:58px">
+          </div>
+
+          <!-- free-form text input (shown only in text mode) -->
+          <div class="ms-2 d-flex align-items-center gap-2 d-none" id="ppTextValueGroup">
+            <input type="text" id="ppTextValue" class="form-control form-control-sm"
+                   placeholder="Type text to stamp…" style="max-width:180px">
+            <input type="text" id="ppTextLabel" class="form-control form-control-sm text-muted"
+                   placeholder="Label (optional)" style="max-width:140px">
+          </div>
+
+          <!-- switch between multiple sig boxes (shown only when >1 sig is detected) -->
+          <button id="ppAddBox" class="btn btn-sm btn-outline-success"
+                  title="Add another box of the current field type">
+            + Add Sig
+          </button>
+          <button id="ppRemoveBox" class="btn btn-sm btn-outline-danger d-none"
+                  title="Remove the active box">
+            <i class="bi bi-x-lg me-1"></i>Remove
+          </button>
+          <button id="ppSwitchBox" class="btn btn-sm btn-outline-primary d-none"
+                  title="Switch to next box of the current type">
+            <i class="bi bi-arrow-left-right me-1"></i>
+            <span id="ppSwitchBoxLabel">Sig 1 of 2</span>
+          </button>
+
+          <div class="ms-auto small text-muted fst-italic" id="ppInstruction">
+            Click anywhere to place Signature
+          </div>
+        </div>
+
+        <!-- Text field fill panel: shown when text stamps exist -->
+        <div id="ppTextFillPanel" class="d-none mx-3 mb-2 border rounded p-2"
+             style="background:#f5f0ff;border-color:#6f42c1 !important">
+          <div class="small fw-semibold mb-2" style="color:#6f42c1">
+            <i class="bi bi-type me-1"></i>Fill in text fields
+          </div>
+          <div id="ppTextFillInputs" class="d-flex flex-column gap-2"></div>
+        </div>
+
+        <!-- page image + click overlays -->
+        <div class="d-flex align-items-start justify-content-center p-3 bg-secondary bg-opacity-10"
+             style="min-height:500px;overflow:auto">
+          <div id="ppPageWrapper" class="position-relative d-inline-block"
+               style="cursor:crosshair;max-width:100%">
+            <img id="ppPageImg" src="" alt="Document page"
+                 style="display:block;max-width:100%;box-shadow:0 2px 12px rgba(0,0,0,.25)" />
+
+            <!-- signature placement overlay (blue) -->
+            <div id="ppSigOverlay" class="position-absolute d-none"
+                 style="border:2px dashed #0d6efd;background:rgba(13,110,253,.12);
+                        pointer-events:none;box-sizing:border-box">
+              <div class="d-flex align-items-center justify-content-center h-100">
+                <i class="bi bi-pen-fill text-primary opacity-75 fs-5"></i>
+              </div>
+            </div>
+
+            <!-- name placement overlay (green) -->
+            <div id="ppNameOverlay" class="position-absolute d-none"
+                 style="border:2px dashed #198754;background:rgba(25,135,84,.15);
+                        pointer-events:none;box-sizing:border-box">
+              <div class="d-flex align-items-center justify-content-center h-100 px-1">
+                <span class="small text-success fw-semibold opacity-75">Name</span>
+              </div>
+            </div>
+
+            <!-- date placement overlay (orange) -->
+            <div id="ppDateOverlay" class="position-absolute d-none"
+                 style="border:2px dashed #fd7e14;background:rgba(253,126,20,.15);
+                        pointer-events:none;box-sizing:border-box">
+              <div class="d-flex align-items-center justify-content-center h-100 px-1">
+                <span class="small fw-semibold opacity-75" style="color:#fd7e14">Date</span>
+              </div>
+            </div>
+          </div>
+          <!-- loading spinner shown while fetching page -->
+          <div id="ppSpinner" class="text-muted py-5">
+            <span class="spinner-border spinner-border-sm me-2"></span>Loading page…
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer flex-column align-items-stretch gap-1">
+
+        <!-- Signed-files results panel (shown after all batch files are done) -->
+        <div id="ppBatchResults" class="d-none w-100">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="fw-semibold small"><i class="bi bi-check2-all me-1 text-success"></i>All files signed — click to download</span>
+            <button class="btn btn-sm btn-outline-success" id="ppDownloadAllBtn">
+              <i class="bi bi-download me-1"></i>Download All
+            </button>
+          </div>
+          <div id="ppBatchResultsList" class="d-flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Normal signing controls (hidden once batch is done) -->
+        <div id="ppSigningControls" class="w-100 d-flex flex-column gap-1">
+          <div class="d-flex align-items-center gap-2 w-100">
+            <span class="small fw-semibold text-muted" style="min-width:90px">Printed name:</span>
+            <input type="text" id="ppSignerName" class="form-control form-control-sm"
+                   placeholder="Your name (for Name fields)" style="max-width:260px">
+          </div>
+          <div class="d-flex align-items-center w-100">
+            <div class="me-auto small text-muted" id="ppPlacementNote">Signature: not placed</div>
+            <button type="button" class="btn btn-secondary ms-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-outline-primary ms-2 d-none" id="ppSignAllBtn">
+              <i class="bi bi-pen-fill me-1"></i>Sign All
+            </button>
+            <button type="button" class="btn btn-primary ms-2" id="ppConfirmBtn" disabled>
+              <i class="bi bi-pen-fill me-1"></i>Sign Here
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Form type selection modal ─────────────────────────────────────── -->
+<div class="modal fade" id="formTypeSelectModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-tag me-2"></i>Select Form Type</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Selecting a known form type lets AutoPen sign immediately using the
+          remembered signature location — no manual placement needed.
+        </p>
+        <label class="form-label fw-semibold">Form type</label>
+        <select id="ftSelectDropdown" class="form-select">
+          <option value="">— New form type (I'll pick the location) —</option>
+        </select>
+        <div id="ftSelectHint" class="form-text mt-1">
+          Choose a saved type to sign instantly, or pick a new location.
+        </div>
+        <!-- "Will stamp" summary — updated by JS when dropdown changes -->
+        <div id="ftStampSummary" class="mt-2 small text-muted"></div>
+
+        <!-- shown only when selected form type has a Name field -->
+        <div id="ftSignerNameRow" class="mt-3 d-none">
+          <label class="form-label fw-semibold small" for="ftSignerNameInput">
+            <i class="bi bi-person-fill me-1 text-success"></i>Printed name (for Name field)
+          </label>
+          <input type="text" id="ftSignerNameInput" class="form-control form-control-sm"
+                 placeholder="">
+        </div>
+
+        <!-- Warning shown when selected form type has no date field -->
+        <div id="ftNoDateWarning" class="mt-2 d-none">
+          <div class="alert alert-warning py-2 px-3 small mb-0">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            This form type has no date field configured.
+            <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                    id="ftReconfigureBtn">Re-save with date &amp; name</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <!-- shown only when a saved form type is selected -->
+        <button type="button" class="btn btn-outline-danger btn-sm me-auto d-none"
+                id="ftDeleteBtn" title="Remove this form type">
+          <i class="bi bi-trash me-1"></i>Delete
+        </button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="ftSelectContinueBtn">
+          Continue <i class="bi bi-arrow-right ms-1"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Save form type modal ──────────────────────────────────────────── -->
+<div class="modal fade" id="formTypeSaveModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-bookmark-plus me-2"></i>Save Form Type?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Step 1: ask to save -->
+        <div id="ftSaveStep1">
+          <p class="mb-2">
+            Would you like AutoPen to remember the placement(s) for
+            future documents of the same type?
+          </p>
+          <p id="ftSavePlacementSummary" class="small text-muted mb-3"></p>
+          <div class="d-grid gap-2">
+            <button class="btn btn-primary" id="ftSaveYesBtn">
+              <i class="bi bi-bookmark-check me-2"></i>Yes, remember it
+            </button>
+            <button class="btn btn-outline-secondary" data-bs-dismiss="modal">
+              No thanks — just sign
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: name and save -->
+        <div id="ftSaveStep2" class="d-none">
+          <label class="form-label fw-semibold">Name this form type</label>
+          <input type="text" id="ftSaveNameInput" class="form-control mb-3"
+                 placeholder="e.g. Travel Authorization" maxlength="80" />
+          <div class="d-grid gap-2">
+            <button class="btn btn-success" id="ftSaveConfirmBtn">
+              <i class="bi bi-floppy-fill me-2"></i>Save Form Type
+            </button>
+            <button class="btn btn-link text-muted" data-bs-dismiss="modal">Skip</button>
+          </div>
+          <div id="ftSaveStatus" class="mt-2 small"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Form Template Modal ──────────────────────────────────────── -->
+<div class="modal fade" id="addFormModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-file-earmark-plus me-2"></i>Add Form Template</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Step 1: upload -->
+        <div id="addFormStep1">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Form Name</label>
+            <input type="text" id="addFormName" class="form-control" placeholder="e.g. Multiple Positions Form" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">PDF Template</label>
+            <input type="file" id="addFormFile" class="form-control" accept=".pdf" />
+            <div class="form-text">Must be a fillable PDF with AcroForm fields.</div>
+          </div>
+          <div id="addFormStep1Status" class="mt-2 small"></div>
+        </div>
+
+        <!-- Step 2: field mapping -->
+        <div id="addFormStep2" class="d-none">
+          <p class="text-muted small mb-3">
+            Rename fields and set defaults. <strong>Label</strong> is what the user sees.
+            <strong>Default</strong> can be a fixed value or <code>today</code> for today's date.
+          </p>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle" id="addFormFieldTable">
+              <thead class="table-light">
+                <tr>
+                  <th>PDF Field Name</th>
+                  <th>Type</th>
+                  <th>User-Friendly Label</th>
+                  <th>Default Value</th>
+                </tr>
+              </thead>
+              <tbody id="addFormFieldBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="addFormStep1Btn">
+          <i class="bi bi-upload me-1"></i>Upload &amp; Inspect
+        </button>
+        <button class="btn btn-success d-none" id="addFormStep2Btn">
+          <i class="bi bi-check-circle me-1"></i>Save Template
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Form Fields Modal ────────────────────────────────────────── -->
+<div class="modal fade" id="editFormModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-pencil-square me-2"></i>Edit Field Mappings — <span id="editFormModalName"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Rename fields and set defaults. Changes apply to future fills only.
+        </p>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>PDF Field Name</th>
+                <th>Type</th>
+                <th>User-Friendly Label</th>
+                <th>Default Value</th>
+              </tr>
+            </thead>
+            <tbody id="editFormFieldBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-success" id="editFormSaveBtn">
+          <i class="bi bi-check-circle me-1"></i>Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Room Config Modal ─────────────────────────────────────────────── -->
+<div class="modal fade" id="roomConfigModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-building me-2"></i>Tracked Rooms &amp; Capacities</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">These rooms appear in the Room Availability Grid and Free Slot Summary of your schedule report.</p>
+        <div id="roomList" class="mb-3"></div>
+        <button class="btn btn-sm btn-outline-primary" onclick="addRoomRow()">
+          <i class="bi bi-plus"></i> Add Room
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveRooms()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast container ──────────────────────────────────────────────── -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+<!-- ── Scripts ───────────────────────────────────────────────────────── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script src="{% static 'js/app.js' %}"></script>
+</body>
+</html>
