@@ -308,7 +308,7 @@ def _add_derived_fields(df, room_caps):
         room     = str(row.get("Room", "") or "")
         rc       = room_caps.get(room)
         room_cap_vals.append(rc)
-        corr_cap_vals.append(rc if rc is not None else enrl_cap)
+        corr_cap_vals.append(enrl_cap)
         key = (str(row.get("Subject", "")).strip(), str(row.get("Catalog#", "")).strip())
         trans_res_vals.append(TRANSFER_SEATS if key in TRANSFER_RESERVE_COURSES else 0)
 
@@ -361,13 +361,12 @@ def _build_capacity_sheet(ws, df, term_label, schedule_name):
 
     grp["Course"]      = grp["Subject"] + " " + grp["Catalog#"]
     grp["Effective"]   = grp["Total_Corr"] - grp["Transfer"]
-    grp["Available"]   = grp["Effective"] - grp["Enrolled"]
-    grp["Fill_Pct"]    = (grp["Enrolled"] / grp["Effective"].replace(0, 1) * 100).round(1)
 
     def _status(r):
-        if r["Available"] <= 0:  return "Full"
-        if r["Fill_Pct"]  >= 75: return "Filling"
-        return "Open"
+        avail = int(row["Total_Corr"]) - int(row["Transfer"]) - int(row["Enrolled"])
+        effective = int(row["Total_Corr"]) - int(row["Transfer"])
+        st = "Full" if avail <= 0 else "Filling" if (effective > 0 and int(row["Enrolled"]) / effective >= 0.75) else "Open"
+        return st
 
     status_cfg = {
         "Full":    (C["red"],    "FFFFFF"),
@@ -377,7 +376,7 @@ def _build_capacity_sheet(ws, df, term_label, schedule_name):
 
     for ri, (_, row) in enumerate(grp.iterrows(), 4):
         alt   = C["alt"] if ri % 2 == 0 else C["white"]
-        avail = int(row["Available"])
+        avail = int(row["Total_Corr"]) - int(row["Transfer"]) - int(row["Enrolled"])
         a_bg  = C["red"] if avail <= 0 else C["yellow"] if avail <= 5 else C["green"]
         a_fg  = "FFFFFF" if avail <= 0 else "000000" if avail <= 5 else "FFFFFF"
         st    = _status(row)
@@ -388,17 +387,19 @@ def _build_capacity_sheet(ws, df, term_label, schedule_name):
         _data_cell(ws, ri, 3, int(row["Sections"]),   bg=alt, halign="center")
         _data_cell(ws, ri, 4, int(row["Total_Corr"]), bg=alt, halign="center")
         _data_cell(ws, ri, 5, int(row["Transfer"]),   bg=alt, halign="center")
-        _data_cell(ws, ri, 6, int(row["Effective"]),  bg=alt, halign="center")
+        _data_cell(ws, ri, 6, f"=D{ri}-E{ri}",  bg=alt, halign="center")
         _data_cell(ws, ri, 7, int(row["Enrolled"]),   bg=alt, halign="center")
 
-        c = ws.cell(row=ri, column=8, value=avail)
+        c = ws.cell(row=ri, column=8, value=f"=D{ri}-E{ri}-G{ri}")
         c.fill = PatternFill("solid", start_color=a_bg)
         c.font = Font(bold=True, color=a_fg)
         c.alignment = Alignment(horizontal="center", vertical="center")
 
-        _data_cell(ws, ri, 9,  f"{row['Fill_Pct']:.1f}%", bg=alt, halign="center")
-
-        c = ws.cell(row=ri, column=10, value=st)
+        c = ws.cell(row=ri, column=9, value=f"=IF(F{ri}=0,0,G{ri}/F{ri})")
+        c.fill = PatternFill("solid", start_color=alt)
+        c.number_format = "0.0%"
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c = ws.cell(row=ri, column=10, value=f'=IF(H{ri}<=0,"Full",IF(G{ri}/F{ri}>=0.75,"Filling","Open"))')
         c.fill = PatternFill("solid", start_color=st_bg)
         c.font = Font(bold=True, color=st_fg)
         c.alignment = Alignment(horizontal="center", vertical="center")
