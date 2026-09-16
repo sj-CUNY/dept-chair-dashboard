@@ -69,6 +69,17 @@ jobs:
         working-directory: desktop
         run: npm ci
 
+      - name: Download LibreOffice MSI
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $version = "25.8.7"
+          $url = "https://download.documentfoundation.org/libreoffice/stable/$version/win/x86_64/LibreOffice_${version}_Win_x86-64.msi"
+          New-Item -ItemType Directory -Force -Path libreoffice | Out-Null
+          Write-Host "Downloading LibreOffice $version for Windows..."
+          Invoke-WebRequest -Uri $url -OutFile "libreoffice/LibreOffice.msi" -UseBasicParsing
+          Write-Host "Downloaded: $((Get-Item libreoffice/LibreOffice.msi).Length / 1MB) MB"
+
       - name: Bundle Python (x64)
         working-directory: desktop
         run: node scripts/bundle-python.js
