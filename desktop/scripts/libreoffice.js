@@ -134,10 +134,19 @@ async function installMac(tmpDir, onProgress) {
 }
 
 async function installWin(tmpDir, onProgress) {
-  const msiPath = path.join(tmpDir, 'LibreOffice.msi');
+  // Prefer the MSI bundled with the app (pre-downloaded in CI) to avoid
+  // requiring an internet connection on first launch.
+  const bundledMsi = path.join(process.resourcesPath || __dirname, 'LibreOffice.msi');
+  let msiPath;
 
-  onProgress?.('download', 0);
-  await download(WIN_MSI_URL, msiPath, (step, pct) => onProgress?.(step, pct));
+  if (fs.existsSync(bundledMsi)) {
+    msiPath = bundledMsi;
+    onProgress?.('install', 'Using bundled LibreOffice installer…');
+  } else {
+    msiPath = path.join(tmpDir, 'LibreOffice.msi');
+    onProgress?.('download', 0);
+    await download(WIN_MSI_URL, msiPath, (step, pct) => onProgress?.(step, pct));
+  }
 
   onProgress?.('install', 'Running installer (this may take a few minutes)…');
   await execFileAsync('msiexec', ['/i', msiPath, '/quiet', '/norestart']);
