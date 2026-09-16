@@ -67,6 +67,12 @@
       "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "win": {
+      "extraResources": [
+        {
+          "from": "libreoffice/LibreOffice.msi",
+          "to": "LibreOffice.msi"
+        }
+      ],
       "target": [
         {
           "target": "nsis",
