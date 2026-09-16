@@ -1,7 +1,7 @@
 name: Build Desktop Installers
 
 # Trigger: push a version tag like v1.0.0
-# Or run manually from the Actions tab (workflow_dispatch)
+# Or run manually from the Actions tab (workflow_dispatch) — manual runs build Windows only
 on:
   push:
     tags:
@@ -11,9 +11,11 @@ on:
 jobs:
 
   # ── macOS Apple Silicon (arm64) ─────────────────────────────────────────────
+  # Skipped on manual workflow_dispatch (Mac release is stable; rebuild on tag only)
   build-mac-arm64:
     name: macOS (Apple Silicon)
     runs-on: macos-latest
+    if: github.event_name == 'push'
     permissions:
       contents: write
     steps:
