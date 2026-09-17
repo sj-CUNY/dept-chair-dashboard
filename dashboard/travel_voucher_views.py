@@ -82,9 +82,23 @@ _ZERO_TOTALS = [
 ]
 
 
-def _build_fields(traveler: dict, day: dict) -> dict:
-    """Build the AcroForm field dict from traveler profile + one day entry."""
+_MAX_DAYS = 7  # template rows .0 – .6
+
+
+def _entry_amount(entry) -> float:
+    if isinstance(entry, dict):
+        return float(entry.get("amount", 0) or 0)
+    return float(entry[1])
+
+
+def _build_fields(traveler: dict, days: list) -> tuple:
+    """Build the AcroForm field dict for all days in one voucher.
+
+    The template has rows .0–.6 (one per day).  Each category gets one
+    summed amount per row; totals and grand total are computed across all days.
+    """
     is_citizen = traveler.get("is_citizen", True)
+    first = days[0] if days else {}
 
     fields: dict = {
         "Name":               traveler.get("name", ""),
@@ -96,34 +110,31 @@ def _build_fields(traveler: dict, day: dict) -> dict:
         "Yes":                "/Yes" if is_citizen else "/Off",
         "NO":                 "/Off" if is_citizen else "/Yes",
         "$ of MIles":         traveler.get("mileage_rate", "0.70"),
-        "Date4_af_date":      day.get("sign_date") or traveler.get("sign_date", ""),
+        "Date4_af_date":      first.get("sign_date") or traveler.get("sign_date", ""),
         "Purpose of Trip 2":  (
-            day.get("purpose")
-            or f"Hiring expenses - Job Talk: {day.get('candidate', '')} on {day.get('trip_date', '')}"
+            first.get("purpose")
+            or f"Hiring expenses - Job Talk: {first.get('candidate', '')} on {first.get('trip_date', '')}"
         ),
-        "Date.0":             day.get("trip_date", ""),
-        "Depature City.0":    day.get("departure_city", ""),
-        "Destination City.0": day.get("destination_city", "New York, NY"),
     }
 
-    # Per-category expense rows
+    cat_totals = {cat: 0.0 for cat in _CATEGORY_PREFIX}
     grand_total = 0.0
-    for cat, prefix in _CATEGORY_PREFIX.items():
-        entries = day.get(cat) or []
-        cat_total = 0.0
-        for col, entry in enumerate(entries):
-            # Each entry is either {"desc": ..., "amount": ...} or [desc, amount]
-            if isinstance(entry, dict):
-                amount = float(entry.get("amount", 0) or 0)
-                desc   = str(entry.get("desc", ""))
-            else:
-                desc, amount = str(entry[0]), float(entry[1])
-            fields[f"{prefix}.{col}"] = f"{amount:.2f}"
-            cat_total += amount
-        fields[_CATEGORY_TOTAL[cat]] = f"{cat_total:.2f}"
-        grand_total += cat_total
 
-    # Zero unused totals
+    for row, day in enumerate(days[:_MAX_DAYS]):
+        fields[f"Date.{row}"]             = day.get("trip_date", "")
+        fields[f"Depature City.{row}"]    = day.get("departure_city", "")
+        fields[f"Destination City.{row}"] = day.get("destination_city", "New York, NY")
+
+        for cat, prefix in _CATEGORY_PREFIX.items():
+            entries = day.get(cat) or []
+            row_total = sum(_entry_amount(e) for e in entries)
+            fields[f"{prefix}.{row}"] = f"{row_total:.2f}" if row_total else ""
+            cat_totals[cat] += row_total
+            grand_total += row_total
+
+    for cat, prefix in _CATEGORY_PREFIX.items():
+        fields[_CATEGORY_TOTAL[cat]] = f"{cat_totals[cat]:.2f}"
+
     for tf in _ZERO_TOTALS:
         fields.setdefault(tf, "0.00")
 
@@ -229,10 +240,9 @@ def tv_generate(request):
     Body: { traveler: {...}, days: [{...}, ...] }
     Returns: { results: [{saved_filename, day_label, total, success, error}] }
 
-    Fills the template and saves each voucher to UPLOAD_DIR so the frontend
-    can open the placement picker for optional signature / date stamping.
-    The user then signs via /api/autopen/sign-placement and downloads via
-    /api/autopen/download/<filename>.
+    All days are merged into a single PDF (one page per day).  The file is
+    saved to UPLOAD_DIR so the frontend can open the placement picker for
+    optional signature / date stamping.
     """
     if not TEMPLATE_FILE.exists():
         return JsonResponse({"error": "Template PDF not uploaded yet."}, status=400)
@@ -249,35 +259,30 @@ def tv_generate(request):
         return JsonResponse({"error": "At least one day is required."}, status=400)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    results = []
 
-    for i, day in enumerate(days):
-        trip_date   = day.get("trip_date", f"day{i+1}")
-        date_clean  = trip_date.replace("/", "-").replace(" ", "_")
-        filename    = f"etravel_{date_clean}_{ts}_{i}.pdf"
-        out_path    = UPLOAD_DIR / filename
+    try:
+        fields, grand_total = _build_fields(traveler, days)
+        filename = f"etravel_{ts}.pdf"
+        fill_pdf(TEMPLATE_FILE, fields, UPLOAD_DIR / filename)
 
-        try:
-            fields, grand_total = _build_fields(traveler, day)
-            fill_pdf(TEMPLATE_FILE, fields, out_path)
+        dates = [d.get("trip_date", "") for d in days if d.get("trip_date")]
+        label = f"{dates[0]} – {dates[-1]}" if len(dates) > 1 else (dates[0] if dates else "All Days")
 
-            result = {
-                "saved_filename": filename,
-                "day_label":      f"Day {i+1} — {trip_date}",
-                "total":          round(grand_total, 2),
-                "success":        True,
-                "error":          None,
-            }
-        except Exception as e:
-            result = {
-                "saved_filename": None,
-                "day_label":      f"Day {i+1} — {trip_date}",
-                "total":          0,
-                "success":        False,
-                "error":          str(e),
-            }
-
-        results.append(result)
+        results = [{
+            "saved_filename": filename,
+            "day_label":      label,
+            "total":          round(grand_total, 2),
+            "success":        True,
+            "error":          None,
+        }]
+    except Exception as e:
+        results = [{
+            "saved_filename": None,
+            "day_label":      "All Days",
+            "total":          0,
+            "success":        False,
+            "error":          str(e),
+        }]
 
     return JsonResponse({"results": results})
 
