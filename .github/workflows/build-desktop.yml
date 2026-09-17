@@ -33,6 +33,30 @@ jobs:
         working-directory: desktop
         run: node scripts/bundle-python.js
 
+      - name: Debug signing credentials
+        env:
+          CSC_LINK: ${{ secrets.APPLE_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          echo "=== P12 file size ==="
+          echo "$CSC_LINK" | base64 -d > /tmp/cert.p12
+          echo "$(wc -c < /tmp/cert.p12) bytes"
+
+          echo "=== Password check ==="
+          openssl pkcs12 -in /tmp/cert.p12 -noout -passin pass:"$CSC_KEY_PASSWORD" 2>&1 \
+            && echo "PASSWORD CORRECT" || echo "PASSWORD WRONG"
+
+          echo "=== Certificate subject + expiry ==="
+          openssl pkcs12 -in /tmp/cert.p12 -nokeys -passin pass:"$CSC_KEY_PASSWORD" 2>/dev/null \
+            | openssl x509 -noout -subject -issuer -enddate 2>/dev/null \
+            || echo "(could not read — wrong password or no cert)"
+
+          echo "=== Private key present? ==="
+          openssl pkcs12 -in /tmp/cert.p12 -nocerts -passin pass:"$CSC_KEY_PASSWORD" -passout pass:tmp 2>/dev/null \
+            && echo "PRIVATE KEY: yes" || echo "PRIVATE KEY: no (exported cert only)"
+
+          rm /tmp/cert.p12
+
       - name: Build DMG (arm64)
         working-directory: desktop
         env:
