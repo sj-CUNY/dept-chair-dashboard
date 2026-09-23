@@ -1,0 +1,28 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "4552:4552"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-dept-chair-dashboard-change-me}
+      - DEBUG=False
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4552/api/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "4553:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - dashboard
+    restart: unless-stopped
