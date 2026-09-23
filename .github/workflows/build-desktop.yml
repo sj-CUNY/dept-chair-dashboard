@@ -72,6 +72,67 @@ jobs:
         with:
           files: desktop/dist/*.dmg
 
+  # ── macOS Intel (x64) ───────────────────────────────────────────────────────
+  build-mac-x64:
+    name: macOS (Intel)
+    runs-on: macos-13
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Install Node dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Bundle Python (x64)
+        working-directory: desktop
+        run: node scripts/bundle-python.js
+
+      - name: Import certificate into keychain
+        env:
+          CSC_LINK: ${{ secrets.APPLE_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/signing.keychain-db
+          KEYCHAIN_PASSWORD=temp-keychain-password
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$CSC_LINK" | base64 -d > /tmp/cert.p12
+          security import /tmp/cert.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P "$CSC_KEY_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          rm /tmp/cert.p12
+
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Build DMG (x64)
+        working-directory: desktop
+        env:
+          CSC_KEYCHAIN: ${{ runner.temp }}/signing.keychain-db
+          CSC_NAME: Developer ID Application
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --x64
+
+      - name: Attach to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/dist/*.dmg
+
   # ── Windows x64 ─────────────────────────────────────────────────────────────
   build-windows:
     name: Windows (x64)
