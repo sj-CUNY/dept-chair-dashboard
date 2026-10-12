@@ -717,22 +717,57 @@ async function loadSignedHistory() {
 // ══════════════════════════════════════════════════════════════════
 
 function initEhraf() {
+  // Toggle between "Generator Output" and "Schedule Files" modes
+  document.querySelectorAll('input[name="ehrafMode"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const useGen = document.getElementById('ehrafModeGen').checked;
+      document.getElementById('ehrafGenFields').classList.toggle('d-none', !useGen);
+      document.getElementById('ehrafSchedFields').classList.toggle('d-none', useGen);
+    });
+  });
+
   document.getElementById('ehrafForm').addEventListener('submit', async e => {
     e.preventDefault();
     const form = e.target;
     const btn  = form.querySelector('button[type=submit]');
+    const useGen = document.getElementById('ehrafModeGen').checked;
+
+    // Validate required fields for the active mode
+    const ehrafFile = document.getElementById('ehrafFile').files[0];
+    if (!ehrafFile) {
+      statusAlert('ehrafStatus', 'Please upload the eHRAF / Payroll export file.', 'danger');
+      return;
+    }
+    if (useGen && !document.getElementById('ehrafGeneratorOutput').files[0]) {
+      statusAlert('ehrafStatus', 'Please upload the Generator Output file.', 'danger');
+      return;
+    }
+    if (!useGen && (!document.getElementById('ehrafSchedule').files[0] || !document.getElementById('ehrafInstructor').files[0])) {
+      statusAlert('ehrafStatus', 'Please upload both Schedule and Instructor files.', 'danger');
+      return;
+    }
+
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running…';
     statusAlert('ehrafStatus', '<span class="spinner-border spinner-border-sm me-2"></span>Running quality check…', 'info');
 
     const fd = new FormData(form);
+    // Remove fields from the inactive mode so the server doesn't see empty inputs
+    if (useGen) {
+      fd.delete('schedule');
+      fd.delete('instructor');
+    } else {
+      fd.delete('generator_output');
+    }
+
     const { ok, data } = await apiFetch('/api/ehraf/run', { method: 'POST', body: fd });
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Run Quality Check';
 
     if (ok) {
+      const sourceNote = data.source === 'generator' ? ' (validated against Generator output)' : '';
       statusAlert('ehrafStatus',
-        `<i class="bi bi-check-circle-fill me-1"></i>Report generated:
+        `<i class="bi bi-check-circle-fill me-1"></i>Report generated${sourceNote}:
          <a href="/api/reports/download/${encodeURIComponent(data.report)}" class="alert-link" download>${data.report}</a>`,
         'success');
     } else {

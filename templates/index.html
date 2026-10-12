@@ -408,21 +408,51 @@
               <div class="card-header">Upload Files</div>
               <div class="card-body">
                 <form id="ehrafForm">
+                  <!-- Expected hours source toggle -->
                   <div class="mb-3">
-                    <label class="form-label fw-semibold">Schedule file <span class="text-danger">*</span></label>
-                    <input type="file" class="form-control" id="ehrafSchedule" name="schedule" accept=".xlsx,.xls,.csv" required />
-                    <div class="form-text">Daily class schedule export</div>
+                    <label class="form-label fw-semibold">Expected hours source</label>
+                    <div class="btn-group w-100" role="group">
+                      <input type="radio" class="btn-check" name="ehrafMode" id="ehrafModeGen" value="generator" checked />
+                      <label class="btn btn-outline-primary btn-sm" for="ehrafModeGen">
+                        <i class="bi bi-file-earmark-spreadsheet me-1"></i>Generator Output
+                      </label>
+                      <input type="radio" class="btn-check" name="ehrafMode" id="ehrafModeSched" value="schedule" />
+                      <label class="btn btn-outline-secondary btn-sm" for="ehrafModeSched">
+                        <i class="bi bi-calendar3 me-1"></i>Schedule Files
+                      </label>
+                    </div>
                   </div>
+
+                  <!-- Generator output mode -->
+                  <div id="ehrafGenFields">
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold">Generator output <span class="text-danger">*</span></label>
+                      <input type="file" class="form-control" id="ehrafGeneratorOutput" name="generator_output" accept=".xlsx,.xls" />
+                      <div class="form-text">The xlsx downloaded from the eHRAF Generator tab</div>
+                    </div>
+                  </div>
+
+                  <!-- Schedule / instructor mode -->
+                  <div id="ehrafSchedFields" class="d-none">
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold">Schedule file <span class="text-danger">*</span></label>
+                      <input type="file" class="form-control" id="ehrafSchedule" name="schedule" accept=".xlsx,.xls,.csv" />
+                      <div class="form-text">Daily class schedule export</div>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label fw-semibold">Instructor table <span class="text-danger">*</span></label>
+                      <input type="file" class="form-control" id="ehrafInstructor" name="instructor" accept=".xlsx,.xls,.csv" />
+                      <div class="form-text">Instructor roster with P/F column</div>
+                    </div>
+                  </div>
+
+                  <!-- eHRAF export (always required) -->
                   <div class="mb-3">
-                    <label class="form-label fw-semibold">eHRAF / Payroll file <span class="text-danger">*</span></label>
+                    <label class="form-label fw-semibold">eHRAF / Payroll export <span class="text-danger">*</span></label>
                     <input type="file" class="form-control" id="ehrafFile" name="ehraf" accept=".xlsx,.xls,.csv" required />
                     <div class="form-text">Adjunct payroll export from eHRAF system</div>
                   </div>
-                  <div class="mb-3">
-                    <label class="form-label fw-semibold">Instructor table <span class="text-danger">*</span></label>
-                    <input type="file" class="form-control" id="ehrafInstructor" name="instructor" accept=".xlsx,.xls,.csv" required />
-                    <div class="form-text">Instructor roster with contact info</div>
-                  </div>
+
                   <div class="d-grid">
                     <button type="submit" class="btn btn-primary">
                       <i class="bi bi-play-fill me-1"></i>Run Quality Check

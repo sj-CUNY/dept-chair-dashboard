@@ -178,14 +178,226 @@ def read_ehraf(path: str) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Generator output parser
+# ---------------------------------------------------------------------------
+
+def read_generator_xlsx(path: str) -> list:
+    """
+    Parse an eHRAF Generator output xlsx and return a list of course_records
+    (same structure as ehraf_generator.generate() returns).
+
+    The generator xlsx layout:
+      Row 1: title
+      Row 2: date info
+      Row 3: blank spacer
+      Row 4: column headers
+      Row 5+: course rows and subtotal rows
+    """
+    df = pd.read_excel(path, header=3, dtype=str)  # header=3 → 0-indexed row 3 = spreadsheet row 4
+    df.columns = df.columns.str.strip()
+
+    records = []
+    for _, row in df.iterrows():
+        instr = str(row.get("Instructor Name", "") or "").strip()
+        if not instr or instr.lower().startswith("subtotal"):
+            continue
+
+        def _num(col):
+            try:
+                return float(str(row.get(col, 0) or 0).replace(",", ""))
+            except (ValueError, TypeError):
+                return 0.0
+
+        records.append({
+            "type":        "course",
+            "instructor":  instr,
+            "subject":     str(row.get("Subject", "") or "").strip(),
+            "catalog":     str(row.get("Catalog #", "") or "").strip(),
+            "section":     str(row.get("Section", "") or "").strip(),
+            "course_code": str(row.get("Course Code", "") or "").strip(),
+            "title":       str(row.get("Class Title", "") or "").strip(),
+            "credits":     int(_num("Credits")),
+            "teaching":    _num("Teaching Hours"),
+            "pd":          _num("PD Hours"),
+            "total":       _num("Total Hours"),
+        })
+    return records
+
+
+# ---------------------------------------------------------------------------
 # Core comparison logic
 # ---------------------------------------------------------------------------
 
-def run_comparison(schedule_df, instructor_df, ehraf_df, four_credit_set):
+def _build_expected_from_generator(generator_records: list) -> dict:
+    """
+    Build a per-instructor expected-hours dict from ehraf_generator course_records.
+
+    Returns: {name_key: {n_sections, h_per_week, teaching, pd, total, courses}}
+    where name_key matches the format produced by normalize_name().
+    """
+    from collections import defaultdict
+    buckets: dict = defaultdict(lambda: {
+        "n_sections": 0, "h_per_week": 0, "teaching": 0, "pd": 0, "total": 0,
+        "courses": [],
+    })
+    for rec in generator_records:
+        if rec.get("type") != "course":
+            continue
+        name_key = normalize_name(rec.get("instructor", ""))
+        if not name_key:
+            continue
+        b = buckets[name_key]
+        b["n_sections"] += 1
+        b["h_per_week"] += rec.get("credits", 0)
+        b["teaching"]   += rec.get("teaching", 0)
+        b["pd"]         += rec.get("pd", 0)
+        b["total"]      += rec.get("total", 0)
+        b["courses"].append(rec.get("course_code", ""))
+        b.setdefault("display_name", rec.get("instructor", ""))
+    return dict(buckets)
+
+
+_TEACH_COLS = ["Teaching Hours", "TEACHING_HRS", "Teaching_Hours", "TEACH_HRS"]
+_PD_COLS    = ["PD Hours", "PROF_DEV_HRS", "Professional Development", "Prof Hours",
+               "PD_HRS", "Prof Dev Hours", "Professional Hours"]
+
+
+def _find_col(rec, candidates):
+    """Return the float value for the first matching column key, or None."""
+    for col in candidates:
+        val = rec.get(col)
+        if val is not None and str(val).strip() not in ("", "nan"):
+            try:
+                return float(str(val).replace(",", ""))
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
+def _run_comparison_from_expected(expected: dict, ehraf_df: pd.DataFrame) -> list:
+    """
+    Cross-validate a pre-built expected dict against eHRAF records.
+    `expected` comes from either _build_expected_from_generator() or run_comparison().
+    """
+    ehraf_lookup: dict[str, list] = {}
+    for _, row in ehraf_df.iterrows():
+        key = row["name_key"]
+        if key:
+            ehraf_lookup.setdefault(key, []).append(row)
+
+    results = []
+    for name_key, exp in expected.items():
+        display_name  = exp.get("display_name", name_key)
+        sections_list = ", ".join(exp.get("courses", []))
+
+        ehraf_records = ehraf_lookup.get(name_key, [])
+        if not ehraf_records:
+            results.append({
+                "Instructor":         display_name,
+                "Sections (#)":       exp["n_sections"],
+                "Courses":            sections_list,
+                "Expected H/W":       exp["h_per_week"],
+                "Expected Teach Hrs": exp.get("teaching", ""),
+                "Expected PD Hrs":    exp["pd"],
+                "Expected Total Hrs": exp["total"],
+                "eHRAF ID":           "—",
+                "eHRAF Status":       "❌ MISSING",
+                "Found Teach Hrs":    "—",
+                "Found PD Hrs":       "—",
+                "Found Total Hrs":    "—",
+                "Teach Match":        "—",
+                "PD Match":           "—",
+                "Hours Match":        "—",
+                "Issue":              "No eHRAF found for this instructor",
+                "Severity":           "CRITICAL",
+            })
+            continue
+
+        valid_records = [r for r in ehraf_records if is_valid_status(str(r.get("APP-STATUS", "")))]
+        check_records = valid_records if valid_records else ehraf_records
+        check_records = sorted(
+            check_records,
+            key=lambda r: int(str(r.get("APPLICATION_ID", 0)).replace("nan", "0") or 0),
+            reverse=True,
+        )
+        rec = check_records[0]
+
+        status       = str(rec.get("APP-STATUS", "Unknown")).strip()
+        app_id       = str(rec.get("APPLICATION_ID", "?")).strip()
+        status_ok    = is_valid_status(status)
+
+        found_total  = _find_col(rec, ["Total Hours", "TOTAL_HRS", "Total_Hours"])
+        found_teach  = _find_col(rec, _TEACH_COLS)
+        found_pd     = _find_col(rec, _PD_COLS)
+
+        exp_total   = exp["total"]
+        exp_teach   = exp.get("teaching")
+        exp_pd      = exp["pd"]
+
+        total_match = found_total is not None and abs(found_total - exp_total) < 0.01
+        teach_match = (found_teach is None or exp_teach is None or
+                       abs(found_teach - exp_teach) < 0.01)
+        pd_match    = (found_pd is None or abs(found_pd - exp_pd) < 0.01)
+
+        issues = []
+        severity = "OK"
+        if not status_ok:
+            issues.append(f"Status is '{status}' (invalid)")
+            severity = "CRITICAL"
+        if found_total is None:
+            issues.append("Total Hours missing in eHRAF")
+            severity = "ERROR" if severity == "OK" else severity
+        elif not total_match:
+            issues.append(f"Total hrs mismatch: eHRAF={found_total}, expected={exp_total}")
+            severity = "ERROR" if severity == "OK" else severity
+        if found_pd is not None and not pd_match:
+            issues.append(f"PD hrs mismatch: eHRAF={found_pd}, expected={exp_pd}")
+            severity = "ERROR" if severity == "OK" else severity
+        if found_teach is not None and not teach_match:
+            issues.append(f"Teaching hrs mismatch: eHRAF={found_teach}, expected={exp_teach}")
+            severity = "ERROR" if severity == "OK" else severity
+
+        def _fmt(v): return v if v is not None else "N/A"
+
+        results.append({
+            "Instructor":         display_name,
+            "Sections (#)":       exp["n_sections"],
+            "Courses":            sections_list,
+            "Expected H/W":       exp["h_per_week"],
+            "Expected Teach Hrs": exp_teach if exp_teach is not None else "",
+            "Expected PD Hrs":    exp_pd,
+            "Expected Total Hrs": exp_total,
+            "eHRAF ID":           app_id,
+            "eHRAF Status":       status,
+            "Found Teach Hrs":    _fmt(found_teach),
+            "Found PD Hrs":       _fmt(found_pd),
+            "Found Total Hrs":    _fmt(found_total),
+            "Teach Match":        "✅" if teach_match else "❌",
+            "PD Match":           "✅" if pd_match else "❌",
+            "Hours Match":        "✅" if total_match else "❌",
+            "Issue":              "; ".join(issues) if issues else "None",
+            "Severity":           severity,
+        })
+
+    return sorted(results, key=lambda x: (x["Severity"] != "CRITICAL", x["Severity"] != "ERROR", x["Instructor"]))
+
+
+def run_comparison(schedule_df, instructor_df, ehraf_df, four_credit_set,
+                   generator_records: list | None = None):
     """
     Compare schedule (PT instructors) vs. eHRAF records.
+
+    If generator_records is supplied, expected hours come directly from the
+    generator output (authoritative); otherwise they are computed from the
+    schedule + four_credit_set.
+
     Returns a list of dicts — one row per PT instructor.
     """
+    if generator_records is not None:
+        expected = _build_expected_from_generator(generator_records)
+        return _run_comparison_from_expected(expected, ehraf_df)
+
+    # ── Legacy path: compute expected from schedule ───────────────────────────
     # Build a set of part-time instructor name keys
     pt_keys = set(instructor_df[instructor_df["P/F"] == "F"]["name_key"])
 
@@ -245,53 +457,60 @@ def run_comparison(schedule_df, instructor_df, ehraf_df, four_credit_set):
         )
         rec = check_records[0]
 
-        status = str(rec.get("APP-STATUS", "Unknown")).strip()
-        app_id = str(rec.get("APPLICATION_ID", "?")).strip()
-        found_total = rec.get("Total Hours")
-
-        # Check status validity
+        status    = str(rec.get("APP-STATUS", "Unknown")).strip()
+        app_id    = str(rec.get("APPLICATION_ID", "?")).strip()
         status_ok = is_valid_status(status)
 
-        # Check hours
-        try:
-            found_total_num = float(str(found_total).replace(",", ""))
-        except (ValueError, TypeError):
-            found_total_num = None
+        found_total = _find_col(rec, ["Total Hours", "TOTAL_HRS", "Total_Hours"])
+        found_teach = _find_col(rec, _TEACH_COLS)
+        found_pd    = _find_col(rec, _PD_COLS)
 
-        hours_match = (
-            found_total_num is not None
-            and abs(found_total_num - exp["total_hours"]) < 0.01
-        )
+        exp_total = exp["total_hours"]
+        exp_teach = exp["h_per_week"] * SEMESTER_WEEKS
+        exp_pd    = exp["prof_hours"]
 
-        # Determine issue
+        total_match = found_total is not None and abs(found_total - exp_total) < 0.01
+        teach_match = found_teach is None or abs(found_teach - exp_teach) < 0.01
+        pd_match    = found_pd is None or abs(found_pd - exp_pd) < 0.01
+
         issues = []
         severity = "OK"
-
         if not status_ok:
             issues.append(f"Status is '{status}' (invalid)")
             severity = "CRITICAL"
-        if found_total_num is None:
+        if found_total is None:
             issues.append("Total Hours missing in eHRAF")
             severity = "ERROR" if severity == "OK" else severity
-        elif not hours_match:
-            issues.append(
-                f"Hours mismatch: eHRAF={found_total_num}, expected={exp['total_hours']}"
-            )
+        elif not total_match:
+            issues.append(f"Total hrs mismatch: eHRAF={found_total}, expected={exp_total}")
+            severity = "ERROR" if severity == "OK" else severity
+        if found_pd is not None and not pd_match:
+            issues.append(f"PD hrs mismatch: eHRAF={found_pd}, expected={exp_pd}")
+            severity = "ERROR" if severity == "OK" else severity
+        if found_teach is not None and not teach_match:
+            issues.append(f"Teaching hrs mismatch: eHRAF={found_teach}, expected={exp_teach}")
             severity = "ERROR" if severity == "OK" else severity
 
+        def _fmt(v): return v if v is not None else "N/A"
+
         results.append({
-            "Instructor": display_name,
-            "Sections (#)": exp["n_sections"],
-            "Courses": sections_list,
-            "Expected H/W": exp["h_per_week"],
-            "Expected Prof Hrs": exp["prof_hours"],
-            "Expected Total Hrs": exp["total_hours"],
-            "eHRAF ID": app_id,
-            "eHRAF Status": status,
-            "Found Total Hrs": found_total_num if found_total_num is not None else "?",
-            "Hours Match": "✅" if hours_match else "❌",
-            "Issue": "; ".join(issues) if issues else "None",
-            "Severity": severity,
+            "Instructor":         display_name,
+            "Sections (#)":       exp["n_sections"],
+            "Courses":            sections_list,
+            "Expected H/W":       exp["h_per_week"],
+            "Expected Teach Hrs": exp_teach,
+            "Expected PD Hrs":    exp_pd,
+            "Expected Total Hrs": exp_total,
+            "eHRAF ID":           app_id,
+            "eHRAF Status":       status,
+            "Found Teach Hrs":    _fmt(found_teach),
+            "Found PD Hrs":       _fmt(found_pd),
+            "Found Total Hrs":    _fmt(found_total),
+            "Teach Match":        "✅" if teach_match else "❌",
+            "PD Match":           "✅" if pd_match else "❌",
+            "Hours Match":        "✅" if total_match else "❌",
+            "Issue":              "; ".join(issues) if issues else "None",
+            "Severity":           severity,
         })
 
     return sorted(results, key=lambda x: (x["Severity"] != "CRITICAL", x["Severity"] != "ERROR", x["Instructor"]))
@@ -310,7 +529,8 @@ COLOR = {
     "TITLE": "203864",
 }
 
-def write_report(results, output_path, run_date, schedule_path, ehraf_path):
+def write_report(results, output_path, run_date, ehraf_path,
+                 schedule_path: str | None = None, source_label: str | None = None):
     wb = Workbook()
 
     # ── Sheet 1: Detailed Results ─────────────────────────────────────────
@@ -325,7 +545,13 @@ def write_report(results, output_path, run_date, schedule_path, ehraf_path):
     ws["A1"].alignment = Alignment(horizontal="center")
 
     ws.merge_cells("A2:L2")
-    ws["A2"] = f"Schedule: {Path(schedule_path).name}    |    eHRAF: {Path(ehraf_path).name}"
+    if source_label:
+        subtitle = source_label
+    elif schedule_path:
+        subtitle = f"Schedule: {Path(schedule_path).name}    |    eHRAF: {Path(ehraf_path).name}"
+    else:
+        subtitle = f"eHRAF: {Path(ehraf_path).name}"
+    ws["A2"] = subtitle
     ws["A2"].font = Font(italic=True, size=10)
     ws["A2"].alignment = Alignment(horizontal="center")
     ws.row_dimensions[2].height = 14
@@ -333,9 +559,11 @@ def write_report(results, output_path, run_date, schedule_path, ehraf_path):
     # Column headers (row 3)
     headers = [
         "Instructor", "Sections", "Courses", "Exp H/W",
-        "Exp Prof Hrs", "Exp Total Hrs",
-        "eHRAF ID", "eHRAF Status", "Found Total Hrs",
-        "Hours Match", "Issue", "Severity",
+        "Exp Teach Hrs", "Exp PD Hrs", "Exp Total Hrs",
+        "eHRAF ID", "eHRAF Status",
+        "Found Teach Hrs", "Found PD Hrs", "Found Total Hrs",
+        "Teach ✓", "PD ✓", "Total ✓",
+        "Issue", "Severity",
     ]
     for col, h in enumerate(headers, 1):
         c = ws.cell(row=3, column=col, value=h)
@@ -350,9 +578,12 @@ def write_report(results, output_path, run_date, schedule_path, ehraf_path):
         fill = PatternFill("solid", start_color=color)
         vals = [
             rec["Instructor"], rec["Sections (#)"], rec["Courses"],
-            rec["Expected H/W"], rec["Expected Prof Hrs"], rec["Expected Total Hrs"],
-            rec["eHRAF ID"], rec["eHRAF Status"], rec["Found Total Hrs"],
-            rec["Hours Match"], rec["Issue"], rec["Severity"],
+            rec["Expected H/W"],
+            rec.get("Expected Teach Hrs", ""), rec.get("Expected PD Hrs", ""), rec["Expected Total Hrs"],
+            rec["eHRAF ID"], rec["eHRAF Status"],
+            rec.get("Found Teach Hrs", "N/A"), rec.get("Found PD Hrs", "N/A"), rec["Found Total Hrs"],
+            rec.get("Teach Match", "N/A"), rec.get("PD Match", "N/A"), rec["Hours Match"],
+            rec["Issue"], rec["Severity"],
         ]
         for col_idx, val in enumerate(vals, 1):
             cell = ws.cell(row=row_idx, column=col_idx, value=val)
@@ -361,14 +592,60 @@ def write_report(results, output_path, run_date, schedule_path, ehraf_path):
         ws.row_dimensions[row_idx].height = 18
 
     # Column widths
-    widths = [28, 9, 40, 9, 12, 13, 12, 24, 14, 11, 55, 10]
+    widths = [28, 8, 38, 8, 11, 9, 12, 12, 24, 12, 10, 12, 8, 7, 7, 55, 10]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     # Auto-freeze header rows
     ws.freeze_panes = "A4"
 
-    # ── Sheet 2: Summary ─────────────────────────────────────────────────
+    # ── Sheet 2: Corrections ──────────────────────────────────────────────
+    corrections = [r for r in results if r["Severity"] in ("CRITICAL", "ERROR")]
+    ws_corr = wb.create_sheet("Corrections Needed")
+    corr_headers = ["Instructor", "eHRAF ID", "Field", "Current Value", "Correct Value", "Action"]
+    for ci, h in enumerate(corr_headers, 1):
+        c = ws_corr.cell(row=1, column=ci, value=h)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", start_color=COLOR["HEADER_LIGHT"])
+        c.alignment = Alignment(horizontal="center", wrap_text=True)
+    ws_corr.row_dimensions[1].height = 20
+
+    corr_row = 2
+    for rec in corrections:
+        row_color = COLOR["CRITICAL"] if rec["Severity"] == "CRITICAL" else COLOR["ERROR"]
+
+        def _write_corr_row(field, current, correct, action):
+            nonlocal corr_row
+            for ci, v in enumerate([rec["Instructor"], rec["eHRAF ID"], field, current, correct, action], 1):
+                c = ws_corr.cell(row=corr_row, column=ci, value=v)
+                c.fill = PatternFill("solid", start_color=row_color)
+                c.alignment = Alignment(wrap_text=True)
+            corr_row += 1
+
+        if rec["eHRAF Status"] == "❌ MISSING":
+            _write_corr_row("eHRAF Record", "—", "Create eHRAF", "Create new eHRAF for this instructor")
+        else:
+            if rec.get("Hours Match") == "❌":
+                _write_corr_row("Total Hours", rec.get("Found Total Hrs", "?"),
+                                rec.get("Expected Total Hrs", ""), "Update Total Hours in eHRAF")
+            if rec.get("PD Match") == "❌":
+                _write_corr_row("PD / Professional Hours", rec.get("Found PD Hrs", "?"),
+                                rec.get("Expected PD Hrs", ""), "Update Professional Development Hours in eHRAF")
+            if rec.get("Teach Match") == "❌":
+                _write_corr_row("Teaching Hours", rec.get("Found Teach Hrs", "?"),
+                                rec.get("Expected Teach Hrs", ""), "Update Teaching Hours in eHRAF")
+            if "invalid" in rec.get("Issue", "").lower() or "status" in rec.get("Issue", "").lower():
+                _write_corr_row("APP-STATUS", rec.get("eHRAF Status", "?"),
+                                "Approved", "Update status in eHRAF")
+
+    ws_corr.column_dimensions["A"].width = 28
+    ws_corr.column_dimensions["B"].width = 12
+    ws_corr.column_dimensions["C"].width = 22
+    ws_corr.column_dimensions["D"].width = 16
+    ws_corr.column_dimensions["E"].width = 16
+    ws_corr.column_dimensions["F"].width = 40
+
+    # ── Sheet 3: Summary ─────────────────────────────────────────────────
     ws2 = wb.create_sheet("Summary")
     total = len(results)
     critical = sum(1 for r in results if r["Severity"] == "CRITICAL")
@@ -377,7 +654,7 @@ def write_report(results, output_path, run_date, schedule_path, ehraf_path):
 
     summary_data = [
         ("Run Date", run_date),
-        ("Schedule File", Path(schedule_path).name),
+        ("Schedule File", Path(schedule_path).name if schedule_path else "Generator output"),
         ("eHRAF File", Path(ehraf_path).name),
         ("", ""),
         ("Total PT Instructors with Active Classes", total),
@@ -475,7 +752,7 @@ def main():
 
     # Write report
     print("Writing report...", end=" ", flush=True)
-    write_report(results, output, run_date, args.schedule, args.ehraf)
+    write_report(results, output, run_date, args.ehraf, schedule_path=args.schedule)
     print(f"Saved to {output}")
 
     print(f"\n  Results:  ✅ OK={ok}  ⚠️  Errors={errors}  ❌ Critical={critical}")
@@ -493,14 +770,22 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 
 def run(
-    schedule_path: str,
-    instructors_path: str,
     ehraf_path: str,
     output_path: str,
+    schedule_path: str | None = None,
+    instructors_path: str | None = None,
     four_credit_catalogs: str = "151,152",
+    generator_records: list | None = None,
 ) -> dict:
     """
     Run the eHRAF quality check and write an Excel report.
+
+    When generator_records is supplied the expected hours come directly from
+    the eHRAF generator output (authoritative). schedule_path and
+    instructors_path are then optional (used only for the report subtitle).
+
+    When generator_records is None, schedule_path and instructors_path are
+    required and expected hours are computed from the schedule file.
 
     Returns a summary dict:
         {ok, errors, critical, total, output_path, run_date}
@@ -508,16 +793,25 @@ def run(
     run_date = datetime.today().strftime("%Y-%m-%d %H:%M")
     four_cr  = set(four_credit_catalogs.split(","))
 
-    sched = read_schedule(schedule_path)
-    inst  = read_instructor_table(instructors_path)
     ehraf = read_ehraf(ehraf_path)
 
-    results  = run_comparison(sched, inst, ehraf, four_cr)
+    if generator_records is not None:
+        results = run_comparison(None, None, ehraf, four_cr, generator_records=generator_records)
+        source_label = f"Expected hours from eHRAF generator    |    eHRAF: {Path(ehraf_path).name}"
+    else:
+        if not schedule_path or not instructors_path:
+            raise ValueError("schedule_path and instructors_path are required when generator_records is not provided")
+        sched   = read_schedule(schedule_path)
+        inst    = read_instructor_table(instructors_path)
+        results = run_comparison(sched, inst, ehraf, four_cr)
+        source_label = None
+
     critical = sum(1 for r in results if r["Severity"] == "CRITICAL")
     errors   = sum(1 for r in results if r["Severity"] == "ERROR")
     ok       = sum(1 for r in results if r["Severity"] == "OK")
 
-    write_report(results, output_path, run_date, schedule_path, ehraf_path)
+    write_report(results, output_path, run_date, ehraf_path,
+                 schedule_path=schedule_path, source_label=source_label)
 
     return {
         "ok":          ok,

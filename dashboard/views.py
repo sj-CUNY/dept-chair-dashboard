@@ -86,27 +86,63 @@ def run_ehraf(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-    saved = {}
-    for key in ('schedule', 'ehraf', 'instructor'):
-        if key not in request.FILES:
-            return JsonResponse({'error': f'Missing file: {key}'}, status=400)
-        f = request.FILES[key]
-        if Path(f.name).suffix.lower() not in ALLOWED_UPLOAD:
-            return JsonResponse({'error': f'Unsupported file type for "{key}"'}, status=400)
-        saved[key] = str(_save_upload(f, key))
+    # eHRAF export is always required.
+    if 'ehraf' not in request.FILES:
+        return JsonResponse({'error': 'Missing file: ehraf'}, status=400)
+    ehraf_file = request.FILES['ehraf']
+    if Path(ehraf_file.name).suffix.lower() not in ALLOWED_UPLOAD:
+        return JsonResponse({'error': 'Unsupported file type for "ehraf"'}, status=400)
+    saved_ehraf = str(_save_upload(ehraf_file, 'ehraf'))
+
+    # Optional uploads: generator output xlsx OR schedule + instructor table
+    saved_generator = saved_schedule = saved_instructor = None
+    for key in ('generator_output', 'schedule', 'instructor'):
+        if key in request.FILES:
+            f = request.FILES[key]
+            if Path(f.name).suffix.lower() not in ALLOWED_UPLOAD:
+                return JsonResponse({'error': f'Unsupported file type for "{key}"'}, status=400)
+            path = str(_save_upload(f, key))
+            if key == 'generator_output':
+                saved_generator = path
+            elif key == 'schedule':
+                saved_schedule = path
+            else:
+                saved_instructor = path
 
     try:
-        from workflows.ehraf_quality_check import run as run_ehraf_check
         import time as _time
+        from workflows.ehraf_quality_check import run as run_ehraf_check, read_generator_xlsx
+
         output_path = str(REPORTS_DIR / f'ehraf_quality_{_time.strftime("%Y%m%d_%H%M%S")}.xlsx')
-        result = run_ehraf_check(
-            schedule_path=saved['schedule'],
-            ehraf_path=saved['ehraf'],
-            instructors_path=saved['instructor'],
-            output_path=output_path,
-        )
+
+        if saved_generator:
+            generator_records = read_generator_xlsx(saved_generator)
+            result = run_ehraf_check(
+                ehraf_path=saved_ehraf,
+                output_path=output_path,
+                generator_records=generator_records,
+            )
+            source = 'generator'
+        elif saved_schedule and saved_instructor:
+            result = run_ehraf_check(
+                ehraf_path=saved_ehraf,
+                output_path=output_path,
+                schedule_path=saved_schedule,
+                instructors_path=saved_instructor,
+            )
+            source = 'schedule'
+        else:
+            return JsonResponse(
+                {'error': 'Upload either the Generator Output xlsx or both Schedule and Instructor files'},
+                status=400,
+            )
+
         report_path = result['output_path']
-        return JsonResponse({'success': True, 'report': Path(report_path).name})
+        return JsonResponse({
+            'success': True,
+            'report': Path(report_path).name,
+            'source': source,
+        })
     except ImportError:
         return JsonResponse({'error': 'eHRAF workflow module not available'}, status=501)
     except Exception as exc:
