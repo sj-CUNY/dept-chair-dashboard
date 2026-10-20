@@ -132,9 +132,9 @@ def _fill_template(template_path: Path, field_values: dict) -> bytes:
     """
     Fill AcroForm fields in template_path using pypdf.
 
-    Uses auto_regenerate=False + strips stale /AP streams + sets /NeedAppearances
-    so every PDF viewer regenerates appearances from the new field values.
-    (auto_regenerate=True can produce corrupt output for some templates.)
+    Uses auto_regenerate=True so pypdf writes fresh appearance streams into
+    the PDF — without them Adobe Acrobat renders fields as blank until clicked.
+    Also sets /NeedAppearances as a belt-and-suspenders hint for other viewers.
     """
     try:
         from pypdf import PdfReader, PdfWriter
@@ -146,19 +146,8 @@ def _fill_template(template_path: Path, field_values: dict) -> bytes:
     writer = PdfWriter(clone_from=reader)
 
     for page in writer.pages:
-        writer.update_page_form_field_values(page, field_values, auto_regenerate=False)
+        writer.update_page_form_field_values(page, field_values, auto_regenerate=True)
 
-    # Strip stale text-widget appearance streams so viewers regenerate them
-    for page in writer.pages:
-        annots = page.get("/Annots")
-        if not annots:
-            continue
-        for ann_ref in annots.get_object():
-            ann = ann_ref.get_object()
-            if ann.get("/Subtype") == "/Widget" and ann.get("/FT") == "/Tx" and "/AP" in ann:
-                del ann[NameObject("/AP")]
-
-    # Tell viewers to regenerate widget appearances on open
     root = writer._root_object
     if "/AcroForm" in root:
         acroform = root["/AcroForm"]
