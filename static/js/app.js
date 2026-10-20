@@ -3597,7 +3597,7 @@ async function _ffGenerate(pane, template) {
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({
             saved_filename: data.saved_filename,
-            placement,
+            placements: Array.isArray(placement) ? placement : [placement],
             signer_name: sName,
           }),
         });
