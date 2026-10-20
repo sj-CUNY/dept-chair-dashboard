@@ -132,12 +132,13 @@ def _fill_template(template_path: Path, field_values: dict) -> bytes:
     """
     Fill AcroForm fields in template_path using pypdf.
 
-    Uses auto_regenerate=True so pypdf bakes /AP appearance streams directly
-    into each widget annotation — values are visible in all PDF viewers without
-    depending on NeedAppearances or viewer-side regeneration.
+    Uses auto_regenerate=False + strips stale /AP streams + sets /NeedAppearances
+    so every PDF viewer regenerates appearances from the new field values.
+    (auto_regenerate=True can produce corrupt output for some templates.)
     """
     try:
         from pypdf import PdfReader, PdfWriter
+        from pypdf.generic import BooleanObject, NameObject
     except ImportError as exc:
         raise RuntimeError("pypdf is not installed — run: pip install pypdf") from exc
 
@@ -145,7 +146,25 @@ def _fill_template(template_path: Path, field_values: dict) -> bytes:
     writer = PdfWriter(clone_from=reader)
 
     for page in writer.pages:
-        writer.update_page_form_field_values(page, field_values, auto_regenerate=True)
+        writer.update_page_form_field_values(page, field_values, auto_regenerate=False)
+
+    # Strip stale text-widget appearance streams so viewers regenerate them
+    for page in writer.pages:
+        annots = page.get("/Annots")
+        if not annots:
+            continue
+        for ann_ref in annots.get_object():
+            ann = ann_ref.get_object()
+            if ann.get("/Subtype") == "/Widget" and ann.get("/FT") == "/Tx" and "/AP" in ann:
+                del ann[NameObject("/AP")]
+
+    # Tell viewers to regenerate widget appearances on open
+    root = writer._root_object
+    if "/AcroForm" in root:
+        acroform = root["/AcroForm"]
+        if hasattr(acroform, "get_object"):
+            acroform = acroform.get_object()
+        acroform[NameObject("/NeedAppearances")] = BooleanObject(True)
 
     buf = io.BytesIO()
     writer.write(buf)
