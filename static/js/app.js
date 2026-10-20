@@ -3602,13 +3602,19 @@ async function _ffGenerate(pane, template) {
           }),
         });
         if (signR.ok) {
-          const blob = await signR.blob();
-          const url  = URL.createObjectURL(blob);
-          const a    = document.createElement('a');
-          a.href = url; a.download = data.saved_filename;
-          a.click(); URL.revokeObjectURL(url);
-          status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Signed and downloaded.</span>';
-          loadSignedHistory();
+          const signData = await signR.json();
+          if (signData.success && signData.filename) {
+            const dlR  = await fetch(`/api/autopen/download/${encodeURIComponent(signData.filename)}`);
+            const blob = await dlR.blob();
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href = url; a.download = signData.filename;
+            a.click(); URL.revokeObjectURL(url);
+            status.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Signed and downloaded.</span>';
+            loadSignedHistory();
+          } else {
+            status.innerHTML = `<span class="text-danger">${escHtml(signData.error || 'Signing failed.')}</span>`;
+          }
         } else {
           status.innerHTML = '<span class="text-danger">Signing failed.</span>';
         }
