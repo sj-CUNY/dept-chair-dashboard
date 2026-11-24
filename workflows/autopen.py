@@ -442,27 +442,24 @@ class AutoPen:
 
         sig_img = Image.open(str(sig_path)).convert('RGBA')
 
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        writer = PdfWriter()
+        # clone_from keeps /AcroForm (field values, /NeedAppearances, fonts);
+        # PdfWriter() + add_page() drops it and fields render blank in Adobe.
+        writer = PdfWriter(clone_from=io.BytesIO(pdf_bytes))
 
-        # Group placements by page
         by_page: dict[int, list] = {}
         for p in placements:
             pg = int(p.get('page', 0))
             by_page.setdefault(pg, []).append(p)
 
-        for i, page in enumerate(reader.pages):
+        for i, page in enumerate(writer.pages):
+            if i not in by_page:
+                continue
             page_w = float(page.mediabox.width)
             page_h = float(page.mediabox.height)
-
-            if i in by_page:
-                overlay_bytes = self._make_signature_overlay(
-                    sig_img, page_w, page_h, by_page[i]
-                )
-                overlay_reader = PdfReader(io.BytesIO(overlay_bytes))
-                page.merge_page(overlay_reader.pages[0])
-
-            writer.add_page(page)
+            overlay_bytes = self._make_signature_overlay(
+                sig_img, page_w, page_h, by_page[i]
+            )
+            page.merge_page(PdfReader(io.BytesIO(overlay_bytes)).pages[0])
 
         out = io.BytesIO()
         writer.write(out)
@@ -517,18 +514,16 @@ class AutoPen:
         text_by_page: {page_num: [text_item, ...]}
         Each text_item has the same shape as in _make_text_overlay.
         """
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        writer = PdfWriter()
-        for i, page in enumerate(reader.pages):
-            if i in text_by_page:
-                page_w = float(page.mediabox.width)
-                page_h = float(page.mediabox.height)
-                overlay_bytes = self._make_text_overlay(
-                    page_w, page_h, text_by_page[i]
-                )
-                overlay_reader = PdfReader(io.BytesIO(overlay_bytes))
-                page.merge_page(overlay_reader.pages[0])
-            writer.add_page(page)
+        writer = PdfWriter(clone_from=io.BytesIO(pdf_bytes))
+        for i, page in enumerate(writer.pages):
+            if i not in text_by_page:
+                continue
+            page_w = float(page.mediabox.width)
+            page_h = float(page.mediabox.height)
+            overlay_bytes = self._make_text_overlay(
+                page_w, page_h, text_by_page[i]
+            )
+            page.merge_page(PdfReader(io.BytesIO(overlay_bytes)).pages[0])
         out = io.BytesIO()
         writer.write(out)
         return out.getvalue()
